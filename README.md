@@ -31,10 +31,19 @@ The engine passed automated tests over thousands of simulated AI turns, three di
 
 The strategy systems have been implemented for this project. The image collection includes assets related to Cinemaware's *Defender of the Crown* and should undergo a rights/permission review before public release. Code and artwork should not be assumed to share licensing.
 
-## Pages hosting and repository migration
+## Hosting and repository
 
-Current deployed URL: https://rustinterry2.github.io/crown/
+This is the standalone **Crown** repository. The full browser game (including `index.html`, `app.js`, `engine.js`, `assets/`, and `tests/`) lives at the root.
 
-This directory currently lives under the homepage repository. To split it into a standalone repo named `crown`, create that public repository, copy all files inside this `crown/` folder to the new repository root (including assets and tests), then enable GitHub Pages from the `main` branch root. GitHub project Pages will retain the URL `https://rustinterry2.github.io/crown/`. Update the homepage link if you choose a different repository name. Leave the homepage copy in place until deployment is confirmed, then remove it.
+To publish via GitHub Pages, open [Settings → Pages](https://github.com/rustinterry2/Crown/settings/pages), choose **Deploy from a branch**, branch **main** and folder **/(root)**, then save. After GitHub deploys it, the project URL should be `https://rustinterry2.github.io/Crown/`.
 
-Changes: no browser saves or footer controls; black connected horses; territory outline selection; colored lord markers in logs; Sherwood click access; Robin portrait; unopposed capture; direct victory ending.
+The legacy homepage-hosted copy remains at `https://rustinterry2.github.io/crown/` until the new Pages deployment is verified. The homepage project link should only be updated after verifying the new address.
+
+## Recent browser parity fixes
+
+- Disabled saves and extraneous footer controls
+- Tiny black Option B horse map marker
+- Damsel rescue timing matched to Pyto, with tournament events retained
+- Lady Catherine's dedicated portrait rather than Robin's
+- Lord-color log markers, outlined territory selection, Sherwood visits, unopposed captures, victory ending
+
