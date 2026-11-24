@@ -202,14 +202,17 @@ export class CrownState{
     if(victim===l||(peace&&passage)){p.campaign_province=id;this.event(peace?'safe_passage':'march',l,id);return {ends_turn:false,text:(peace?'Safe passage through ':'Marched to ')+T[id][0]+'.'};}
     if(victim){if((pr.home_castle||pr.secondary_castle)&&p.campaign_army.catapults<1)throw Error('A catapult is required to attack this castle');if(peace&&!passage)this.declareWar(l,victim);}
     if(!victim){this.attackerCasualties(l,Math.min(.09,this.rng.uniform(0,.07)));p.campaign_province=id;let got=this.claimWar(id,l);return {ends_turn:true,win:true,text:`Claimed ${T[id][0]}.${got?' +'+got+' vassals.':''}`};}
-    let defenders=this.defenders(id),castle=pr.home_castle||pr.secondary_castle;this.last_battle_target=id;
+    let defenders=this.defenders(id),castle=pr.home_castle||pr.secondary_castle;
     if(!COUNT(defenders)){if(castle&&p.campaign_army.catapults<1)throw Error('A catapult is required to attack this castle');p.campaign_province=id;this.claimWar(id,l);this.event('unopposed_capture',l,id);return {ends_turn:true,win:true,text:`${T[id][0]} taken without resistance.`};}
+    this.last_battle_target=id;
     for(let v of this.visiting(id))this.declareWar(l,v);
     let robin=this.consumeRobin(l,victim),atk=this.strength(p.campaign_army,l,t)*this.rng.uniform(.87,1.15),df=this.defensePower(id)*this.rng.uniform(.88,1.13);if(castle)df*=Math.max(1.10,1.85-.16*p.campaign_army.catapults);if(robin)df*=.74;df=Math.max(df,castle?4:.01);let win=this.rng.random()<odds(atk,df),lost=0,enemyLost=0,text='';
     if(win){lost=this.attackerCasualties(l,clamp(.055+.20*Math.pow(df/Math.max(1,atk),.70),.025,.52));enemyLost=this.defenderCasualties(id,clamp(.57+.12*Math.pow(atk/Math.max(1,df),.35),.38,.82),true);if(victim&&this.lords[victim].alive&&this.lords[victim].campaign_province===id)this.retreat(victim);if(castle&&p.campaign_army.catapults>0&&this.rng.random()<.18){this.casualties(l,'campaign',{soldiers:0,knights:0,catapults:1});lost++;}p.campaign_province=id;let got=this.claimWar(id,l);text=`${T[id][0]} captured!`+(lost?` Lost ${lost}.`:'')+(enemyLost?` Enemy lost ${enemyLost}.`:'')+(got?` +${got} vassals.`:'');}
     else{lost=this.attackerCasualties(l,clamp(.12+.28*Math.pow(df/Math.max(1,atk),.75),.08,.78));enemyLost=this.defenderCasualties(id,clamp(.16*Math.pow(atk/Math.max(1,df),.65),.08,.75));this.retreat(l);text=`Attack on ${T[id][0]} repelled.`+(lost?` Lost ${lost}.`:'')+(enemyLost?` Enemy lost ${enemyLost}.`:'');}
     this.event('battle',l,id,{defender:victim,castle,tactic:t,robin,won:win,losses:lost,defenders_lost:enemyLost});this.checkEnd();return{ends_turn:true,text,win};
   }
+  // Only a contested battle by this actor in the current action can trigger animation.
+  battleSince(start,lord){return this.ledger.slice(start).find(e=>e.action==='battle'&&e.lord===lord)||null;}
   aiProfile(l){return AI_PROFILES[this.ai_profiles?.[l]]||M3_CONFIG;}
   aiTactic(l,id){if(!this.provinces[id].owner)return ['Stand and Fight',1];return ['Stand and Fight','Outflank','Ferocious Attack','Bombard'].map(t=>[t,this.expectedOdds(l,id,t)]).sort((a,b)=>b[1]-a[1])[0];}
   aiHomeDanger(l){let home=this.lords[l].home_province,worst=0;for(let [enemy,p] of Object.entries(this.lords)){if(enemy===l||!p.alive||this.friendly(l,enemy)||!this.neighbors[home].includes(p.campaign_province)||!p.campaign_army.catapults||!p.campaign_army.soldiers&&!p.campaign_army.knights)continue;worst=Math.max(worst,...['Outflank','Bombard','Ferocious Attack'].map(t=>this.expectedOdds(enemy,home,t)));}return worst;}
@@ -253,7 +256,7 @@ export class CrownState{
     return candidates[0]??null;
   }
   aiFortress(l){let p=this.lords[l];if(p.treasury<44)return null;let candidates=[];for(let id of IDS){let pr=this.provinces[id];if(pr.owner!==l||pr.home_castle||pr.secondary_castle)continue;let en=this.neighbors[id].filter(n=>this.provinces[n].owner&&!this.friendly(l,this.provinces[n].owner)&&this.provinces[n].owner!==l);if(!en.length)continue;let armies=Object.keys(this.lords).filter(e=>e!==l&&this.lords[e].alive&&!this.friendly(l,e)&&this.neighbors[id].includes(this.lords[e].campaign_province)).length;let exp=2*en.length+3*armies+T[id][1]*.35;if(exp>=5)candidates.push([exp,id]);}candidates.sort((a,b)=>b[0]-a[0]||b[1]-a[1]);return candidates[0]?.[1]??null;}
-  aiOne(l){let p=this.lords[l];if(!p.alive)return '';let home=p.home_province,location=p.campaign_province,funds=p.treasury,danger=this.aiHomeDanger(l);let name=SHORT[l],config=this.aiProfile(l),model=this.ai_profiles?.[l]||'M3';
+  aiOne(l){this.last_battle_target=0;let p=this.lords[l];if(!p.alive)return '';let home=p.home_province,location=p.campaign_province,funds=p.treasury,danger=this.aiHomeDanger(l);let name=SHORT[l],config=this.aiProfile(l),model=this.ai_profiles?.[l]||'M3';
     if(!config.zero&&danger>=.50&&location!==home&&COUNT(p.campaign_army)>0){this.move(l,home);delete this.ai_goals[l];return `${name}: Returned home to defend the castle.`;}
     if(location===home){let reserve=config.zero?0:danger>=.45?11:7,units={soldiers:Math.max(0,p.home_army.soldiers-reserve),knights:p.home_army.knights,catapults:p.home_army.catapults};if(COUNT(units))this.transfer(l,units);}
     let plan=this.aiPlan(l);

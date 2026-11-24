@@ -24,6 +24,8 @@ test('unoccupied enemy province changes ownership without battle',()=>{
   p.campaign_army.soldiers=12;
   const result=s.move(h,target,'Stand and Fight',false);
   assert.equal(result.win,true);assert.equal(s.provinces[target].owner,h);
+  assert.equal(s.last_battle_target,0);assert.equal(s.battleSince(0,h),null);
+  assert.ok(s.ledger.some(e=>e.action==='unopposed_capture'&&e.province===target));
 });
 test('all Norman castles captured leads to victory',()=>{
   const s=new CrownState({seed:20,humanChoice:'Cedric of Rotherwood'}),h=s.human;
@@ -55,4 +57,38 @@ test('tournament invitation flags are preserved when maiden is not eligible',()=
   assert.equal(s.tournament_pending,true);
   s.tournament_pending=false;s.tournament_held=true;
   assert.equal(s.tournament_held,true);
+});
+
+test('battle animation selection accepts only new contested battles by the acting lord',()=>{
+  const s=new CrownState({seed:12}),h=s.human,rival=Object.keys(s.lords).find(l=>s.lords[l].faction==='Norman');
+  const target=s.neighbors[s.lords[h].home_province].find(id=>!s.provinces[id].owner);
+  s.provinces[target].owner=rival;
+  s.lords[rival].campaign_province=target;
+  s.lords[rival].campaign_army.soldiers=10;
+  s.lords[h].campaign_army.soldiers=30;
+  const start=s.ledger.length;
+  s.move(h,target,'Outflank',false);
+  const battle=s.battleSince(start,h);
+  assert.ok(battle);assert.equal(battle.province,target);
+  assert.equal(s.battleSince(start,rival),null);
+  const after=s.ledger.length;
+  s.purchase(rival,{soldiers:1});
+  assert.equal(s.battleSince(after,rival),null);
+  assert.equal(s.battleSince(after,h),null);
+  s.last_battle_target=target;
+  s.aiHomeDanger=()=>0;s.aiPlan=()=>null;s.aiNeedSiege=()=>false;s.aiRecruit=()=>0;s.aiFortress=()=>null;
+  s.lords[rival].treasury=0;
+  s.lords[rival].campaign_province=s.lords[rival].home_province;
+  const next=s.ledger.length;s.aiOne(rival);
+  assert.equal(s.last_battle_target,0);assert.equal(s.battleSince(next,rival),null);
+});
+test('battle animation selection ignores neutral claims, unopposed captures, and all noncombat ledger entries',()=>{
+  const s=new CrownState({seed:24}),l=s.human;
+  const start=s.ledger.length;
+  for(const action of ['claim','unopposed_capture','purchase_troops','build_castle','army_retreated','march','safe_passage','transfer','research_preparation'])s.event(action,l,2);
+  assert.equal(s.battleSince(start,l),null);
+  s.event('battle',l,2,{won:false});
+  assert.equal(s.battleSince(start,l).won,false);
+  const next=s.ledger.length;s.event('battle',l,3,{won:true,castle:true});
+  assert.equal(s.battleSince(next,l).province,3);
 });
