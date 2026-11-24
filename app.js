@@ -6,7 +6,7 @@ let mode='splash',state=null,options={character:null,difficulty:'easy',map:'engl
 let selected=0,pendingTarget=null,attackingAlly=false,tactic='Stand and Fight',quantity={soldiers:0,knights:0,catapults:0},wantCastle=false,selectedCastle=null,transferDir='out';
 let message='',backMode='orders',scene='',sceneReturn='orders',sceneNotice='',sceneNoticeBack='',sceneOverlay='',story=[],storyEnd='orders',pendingMaiden=null,summary=[],reportScroll=0,flashId=0,flashVisible=false,visualOwners=null,visualHorsePos=null,visualAlive=null,guide='conquest',guideTarget=0,guideTicks=0;
 let queue=[],queueIndex=0,aiMessage='',aiRunning=false,pendingHomeAttack=null,pendingHumanFlash=0,lastSceneBefore='';let coloredMap=null,coloredMapKey='',tapActive=false;
-let noticePortrait=null;
+let noticePortrait=null,englandSelectionMask=null,horseHitTargets=[];
 const outlineCache=new Map();
 function loadImage(file){return new Promise((resolve,reject)=>{let im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Failed loading '+file));im.src=A+(assetMap[file]||file);});}
 async function loadAssets(){let all=['board.png','font_atlas.png','hitmask.png','paint_alpha.png','title_splash.png','robin_sherwood.png','norman_castle.png','saxon_castle.png','maiden_swordfight.png','lady_catherine.png','the_end.png','tournament_joust.png','tournament_trumpets.png','home_castle_under_attack.png','home_castle_fallen.png'];
@@ -14,7 +14,7 @@ async function loadAssets(){let all=['board.png','font_atlas.png','hitmask.png',
   assetMap=await (await fetch(A+'asset_manifest.json')).json();
   await Promise.all(all.map(async f=>{img[f]=await loadImage(f);}));
   fontMetrics=await (await fetch(A+'font_metrics.json')).json();atlas=img['font_atlas.png'];hit=img['hitmask.png'];paint=img['paint_alpha.png'];
-  const temp=document.createElement('canvas');temp.width=W;temp.height=H;let ctx=temp.getContext('2d',{willReadFrequently:true});ctx.drawImage(img['board.png'],0,0);baseData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(hit,0,0);hitData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(paint,0,0);paintData=ctx.getImageData(0,0,W,H);}
+  const temp=document.createElement('canvas');temp.width=W;temp.height=H;let ctx=temp.getContext('2d',{willReadFrequently:true});ctx.drawImage(img['board.png'],0,0);baseData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(hit,0,0);hitData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(paint,0,0);paintData=ctx.getImageData(0,0,W,H);englandSelectionMask=buildEnglandSelectionMask(hitData.data);}
 const glyphCache=new Map();function glyph(style,ch,ink){let source=style==='report'?'small':style,metric=fontMetrics[source],g=metric.glyphs[ch]||metric.glyphs[' '];let [sx,sy,adv]=g,[tw,th]=metric.tile,key=`${source}/${ch}/${ink}`;if(!glyphCache.has(key)){
   let canvas=document.createElement('canvas');canvas.width=tw;canvas.height=th;let x=canvas.getContext('2d',{willReadFrequently:true});x.drawImage(atlas,sx,sy,tw,th,0,0,tw,th);let data=x.getImageData(0,0,tw,th);let rgb=(ink.match(/[a-f\d]{2}/gi)||[]).map(v=>parseInt(v,16));if(rgb.length!==3)rgb=[67,32,24];for(let i=0;i<data.data.length;i+=4){let alpha=data.data[i];data.data[i]=rgb[0];data.data[i+1]=rgb[1];data.data[i+2]=rgb[2];data.data[i+3]=alpha;}x.putImageData(data,0,0);glyphCache.set(key,canvas);
 }return {canvas:glyphCache.get(key),adv:style==='report'?Math.round(adv*.93):adv};}
@@ -87,6 +87,67 @@ function coloredBoard(){let owners=IDS.map(id=>state.provinces[id].owner),castle
   drawSherwood(x);
   coloredMapKey=key;coloredMap=canvas;return canvas;
 }
+// The color-paint mask is artwork-aware; selection needs continuous land.
+function originalCastleRect(id){
+  const [x,y]=CASTLE_POS[id];
+  return [x-29,y-30,x+29,y+30];
+}
+function buildEnglandSelectionMask(rgba){
+  const mask=new Uint8Array(W*H);
+  for(let i=0;i<mask.length;i++){
+    let id=rgba[i*4];if(id===11)id=14;
+    mask[i]=T[id]?id:0;
+  }
+  // Restore pixels omitted by the castle artwork. Never overwrite another
+  // province's existing land pixels, and leave the color-paint mask untouched.
+  for(const id of CASTLES){
+    const [x1,y1,x2,y2]=originalCastleRect(id);
+    for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++){
+      const i=y*W+x;if(!mask[i])mask[i]=id;
+    }
+  }
+  // Fill enclosed artwork holes (including any remaining castle or forest
+  // cutouts) only when they are bounded by one province, not open water.
+  const visited=new Uint8Array(mask.length),queue=new Int32Array(mask.length);
+  for(let i=0;i<mask.length;i++){
+    if(mask[i]||visited[i])continue;
+    let head=0,tail=1,border=0,mixed=false,exterior=false;queue[0]=i;visited[i]=1;
+    while(head<tail){
+      const q=queue[head++],x=q%W,y=Math.floor(q/W);
+      if(x===0||x===W-1||y===0||y===H-1)exterior=true;
+      for(const n of [x>0?q-1:-1,x<W-1?q+1:-1,y>0?q-W:-1,y<H-1?q+W:-1]){
+        if(n<0)continue;
+        if(mask[n]){if(border&&border!==mask[n])mixed=true;else border=mask[n];}
+        else if(!visited[n]){visited[n]=1;queue[tail++]=n;}
+      }
+    }
+    if(!exterior&&!mixed&&border)for(let k=0;k<tail;k++)mask[queue[k]]=border;
+  }
+  return mask;
+}
+function castleHitAt(x,y){
+  if(!state)return 0;
+  let closest=0,best=Infinity;
+  for(const id of IDS){
+    const pr=state.provinces[id];if(!pr.home_castle&&!pr.secondary_castle)continue;
+    const random=mapInfo?.type==='random';
+    const [cx,cy]=random?mapInfo.castles[id]:CASTLE_POS[id];
+    const r=!random&&CASTLES.includes(id)?originalCastleRect(id):[cx-20,cy-18,cx+20,cy+24];
+    if(x>=r[0]&&x<=r[2]&&y>=r[1]&&y<=r[3]){
+      const d=(x-cx)**2+(y-cy)**2;if(d<best){best=d;closest=id;}
+    }
+  }
+  return closest;
+}
+function horseHitAt(x,y){
+  // Reverse draw order: the topmost visible horse wins if sprites overlap.
+  for(let i=horseHitTargets.length-1;i>=0;i--){
+    const h=horseHitTargets[i],px=Math.floor((x-Math.round(h.x-25.6))/HORSE_SCALE),
+      py=Math.floor((y-Math.round(h.y-20))/HORSE_SCALE);
+    if(HORSE_B[py]?.[px]==='#')return h.id;
+  }
+  return 0;
+}
 function territoryOutline(id){
   const key=(mapInfo?.type==='random'?'r'+mapInfo.seed:'england')+':'+id;
   if(outlineCache.has(key))return outlineCache.get(key);
@@ -103,7 +164,7 @@ function territoryOutline(id){
     }
   }else{
     const maskAt=(px,py)=>{if(px<0||py<0||px>=W||py>=H)return 0;
-      const n=hitData.data[(py*W+px)*4];return n===11?14:n;};
+      return englandSelectionMask[py*W+px];};
     for(let py=140;py<945;py+=2)for(let px=35;px<817;px+=2){
       if(maskAt(px,py)!==id)continue;
       if(maskAt(px-3,py)!==id||maskAt(px+3,py)!==id||maskAt(px,py-3)!==id||maskAt(px,py+3)!==id)x.fillRect(px,py,3,3);
@@ -122,6 +183,7 @@ function overlap(a,b){return Math.max(0,Math.min(a[2],b[2])-Math.max(a[0],b[0]))
 function castleExclusionRects(){
   return IDS.filter(id=>state.provinces[id].home_castle||state.provinces[id].secondary_castle).map(id=>{
     const [x,y]=mapInfo?.type==='random'?mapInfo.castles[id]:CASTLE_POS[id];
+    if(mapInfo?.type!=='random'&&CASTLES.includes(id))return originalCastleRect(id);
     return [x-20,y-18,x+20,y+24];
   });
 }
@@ -148,7 +210,7 @@ function placeHorse(id,pt,offset,castles,placed){
   if(!best)for(let y=166;y<=900;y+=12)for(let x=70;x<=780;x+=12)consider(x,y);
   return best;
 }
-function renderMap(){if(!state){c.drawImage(img['board.png'],0,0);return;}if(visualOwners){let saved=state.provinces;let hold={};for(let id of IDS){hold[id]=saved[id].owner;if(id in visualOwners)saved[id].owner=visualOwners[id];}coloredMapKey='';c.drawImage(coloredBoard(),0,0);for(let id of IDS)saved[id].owner=hold[id];coloredMapKey='';}else c.drawImage(coloredBoard(),0,0);
+function renderMap(){horseHitTargets=[];if(!state){c.drawImage(img['board.png'],0,0);return;}if(visualOwners){let saved=state.provinces;let hold={};for(let id of IDS){hold[id]=saved[id].owner;if(id in visualOwners)saved[id].owner=visualOwners[id];}coloredMapKey='';c.drawImage(coloredBoard(),0,0);for(let id of IDS)saved[id].owner=hold[id];coloredMapKey='';}else c.drawImage(coloredBoard(),0,0);
   const byTerritory=new Map();
   for(const [l,p] of Object.entries(state.lords)){
     if(!(visualAlive?.[l]??p.alive))continue;
@@ -163,11 +225,11 @@ function renderMap(){if(!state){c.drawImage(img['board.png'],0,0);return;}if(vis
     const spreads=horseOffsets(group.length);
     group.forEach(({l,pt},i)=>{
       const p=placeHorse(id,pt,spreads[i],castleRects,placed);
-      if(p){placed.push(p.box);horse(p.x,p.y,state.colors[l]||[120,155,220]);}
+      if(p){placed.push(p.box);horseHitTargets.push({id,x:p.x,y:p.y});horse(p.x,p.y,state.colors[l]||[120,155,220]);}
     });
   }
   if(selected>0&&['read','move','castle_pick','battle','passage'].includes(mode))c.drawImage(territoryOutline(selected),0,0);
-  if(flashVisible&&flashId){let mask=mapInfo?.type==='random'?null:hitData;if(mask){c.fillStyle='rgba(255,205,104,.30)';for(let y=140;y<950;y+=4)for(let x=40;x<820;x+=4){if(mask.data[(y*W+x)*4]===flashId)c.fillRect(x,y,4,4);}}else c.drawImage(territoryOutline(flashId),0,0);}
+  if(flashVisible&&flashId){let mask=mapInfo?.type==='random'?null:hitData;if(mask){c.fillStyle='rgba(255,205,104,.30)';for(let y=140;y<950;y+=4)for(let x=40;x<820;x+=4){if(englandSelectionMask[y*W+x]===flashId)c.fillRect(x,y,4,4);}}else c.drawImage(territoryOutline(flashId),0,0);}
 }
 function fullScreen(file,overlay=''){c.fillStyle='#000';c.fillRect(0,0,W,H);let im=img[file];let ratio=Math.min(W/im.width,(H-220)/im.height),dw=im.width*ratio,dh=im.height*ratio,dx=(W-dw)/2,dy=(H-dh)/2;c.imageSmoothingEnabled=file==='home_castle_under_attack.png'||file==='home_castle_fallen.png'?false:true;c.drawImage(im,dx,dy,dw,dh);c.imageSmoothingEnabled=true;if(overlay==='The End'){text('The End',192,720,'title','#150a07','center');text('The End',188,716,'title','#edcf87','center');}}
 function renderSetup(){c.drawImage(img['board.png'],0,0);c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);text('A Kingdom Awaits',426,111,'title',INK,'center');text('Choose thy lord and destiny',426,183,'small',LIGHT,'center');rule(232);text('I. Choose Thy Saxon Lord',426,252,'name',INK,'center');let lords=['Wolfric the Wild','Geoffrey Longsword','Cedric of Rotherwood','Wilfred of Ivanhoe'];lords.forEach((l,i)=>{let x=65+188*i,y=315,im=portraitPath(l),w=161,h=199,active=options.character===l;c.fillStyle=active?'#e0aa55':'#855632';c.fillRect(x-8,y-8,w+16,h+16);c.drawImage(im,x,y,w,h);c.lineWidth=active?6:4;c.strokeStyle=active?'#ffe088':'#4d2714';c.strokeRect(x,y,w,h);buttons.push({key:'setup_lord:'+l,rect:[x-8,y-8,x+w+8,651]});text(SHORT[l],x+w/2,530,'small',INK,'center');text(START_RANK[l],x+w/2,578,'small',LIGHT,'center');});button('setup_lord:random','Random Lord',[122,670,730,742],'body',options.character===null);rule(772);text('II. Choose Thy Challenge',426,796,'name',INK,'center');[['easy','Noble Quest','Two Saxon allies; rescue available'],['medium','Norman Peril','One Saxon ally; one lord turns Norman'],['hard','The Last Saxon','No Saxon allies; no maiden rescue']].forEach(([key,title,desc],i)=>{let y=854+i*116;button('setup_difficulty:'+key,title,[122,y,730,y+72],'body',options.difficulty===key);text(desc,426,y+76,'small',LIGHT,'center');});rule(1215);text('III. Choose Thy Kingdom',426,1236,'name',INK,'center');button('setup_map:england','England - Original Map',[122,1323,730,1395],'body',options.map==='england');button('setup_map:random','Random Kingdom',[122,1420,730,1492],'body',options.map==='random');text('A different realm with each new campaign',426,1510,'small',LIGHT,'center');rule(1590);button('setup_begin','Begin Campaign',[122,1646,730,1720]);}
@@ -275,7 +337,7 @@ function nextAiStep(){if(mode!=='ai_phase'||aiRunning)return;if(pendingHumanFlas
 function resumeAi(){mode='ai_phase';render();setTimeout(nextAiStep,260);}
 function afterHomeIntro(){let e=pendingHomeAttack;alertText(`${SHORT[e.attacker]} has reached ${T[e.target][0]}. Thy home castle is under attack! Man the walls and beat back the invader.`,'__home_flash__');}
 function afterHomeFlash(){mode='ai_phase';render();showFlash(pendingHomeAttack.target,()=>{if(pendingHomeAttack.won)alertText('Thy men have held the castle. The invader is thrown back from thy gates.','__home_resume__');else alertText('Thy home castle has fallen. With its loss, thy cause in England is ended.','__home_defeat__');});}
-function provinceAt(x,y){if(y<120||y>950||x<15||x>838)return 0;if(mapInfo?.type==='random'){let lx=Math.floor(x/4),ly=Math.floor(y/4);return mapInfo.cells[ly*mapInfo.w+lx]||0;}let id=hitData.data[(Math.floor(y)*W+Math.floor(x))*4];if(id===11)id=14;return T[id]?id:0;}
+function provinceAt(x,y){if(y<120||y>950||x<15||x>838)return 0;if(mapInfo?.type==='random'){let lx=Math.floor(x/4),ly=Math.floor(y/4);return mapInfo.cells[ly*mapInfo.w+lx]||0;}return englandSelectionMask?.[Math.floor(y)*W+Math.floor(x)]||0;}
 function isSherwood(x,y){
   const [fx,fy]=sherwoodCenter();
   return Math.abs(x-fx)<=47&&Math.abs(y-fy)<=32;
@@ -297,7 +359,8 @@ function guideTap(key){
 function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(mode==='scene'){let back=sceneReturn;if(sceneNotice){let n=sceneNotice,b=sceneNoticeBack;sceneNotice='';alertText(n,b,/Robin pledges/.test(n)?'Robin Hood':null);return;}if(back==='__story__')storyNext();else if(back==='__new_campaign__'){mode='setup';render();}else if(back==='__home_attack_intro__')afterHomeIntro();else if(back==='__resume_ai__')resumeAi();else{mode=back;render();}return;}if(mode==='ai_phase')return;
   let key=buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key;
   if(key){try{action(key);}catch(e){console.error(e);alertText(e.message);}render();if(!['ai_phase'].includes(mode))return;}
-  if(isSherwood(x,y)){
+  const artworkTarget=castleHitAt(x,y)||horseHitAt(x,y);
+  if(!artworkTarget&&isSherwood(x,y)){
     const returnTo=mode;
     if(mode==='read')selected=-1;
     if(mode==='move'){
@@ -308,7 +371,7 @@ function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(m
     }else sceneShow('robin_sherwood.png',returnTo);
     return;
   }
-  let id=provinceAt(x,y);if(!id)return;
+  let id=artworkTarget||provinceAt(x,y);if(!id)return;
   if(mode==='read'){selected=id;render();return;}
   if(mode==='castle_pick'){selected=id;selectedCastle=id;render();return;}
   if(mode==='move'){
