@@ -39,15 +39,18 @@ function drawPortrait(l,[x,y,x2,y2],caption=true){let im=portraitPath(l);c.fillS
   // Fit and crop like the Pyto portrait renderer.
   let ratio=Math.max(w/im.width,h/im.height),sw=w/ratio,sh=h/ratio,sx=(im.width-sw)/2,sy=Math.max(0,Math.min(im.height-sh,(im.height-sh)*.24));c.drawImage(im,sx,sy,sw,sh,x+14,y+12,w,h);c.lineWidth=3;c.strokeStyle='#5b301b';c.strokeRect(x+12,y+10,w+4,h+4);if(caption)text(SHORT[l]||l,(x+x2)/2,y2+7,'small',INK,'center');}
 function castleGraphic(id,x,y){c.fillStyle='#bb8a52';c.strokeStyle='#2a140e';c.lineWidth=3;c.fillRect(x-13,y-3,26,19);c.strokeRect(x-13,y-3,26,19);for(let dx of [-11,0,11]){c.fillStyle='#d7ab72';c.fillRect(x+dx-4,y-10,8,13);c.strokeRect(x+dx-4,y-10,8,13);}c.fillStyle='#4d2d1b';c.fillRect(x-3,y+8,6,8);}
-// Option B: 8-bit black silhouette at the ORIGINAL tiny on-map size (64 x 50).
-// 32x25 logical pixels, enlarged exactly 2x, without image smoothing.
+// 32x25 pixel-art silhouette rendered at 80% of its previous 64x50 size.
 const HORSE_B = ["................................","....#..#........................","....#####.......................",".....#####......................","....#######.....................","...##.######....................","..##########....................",".####..######...................",".###...######...................",".......#######.....#####........",".......####################.....",".......#####################....",".......##################.###...",".......##################..##...","........################...##...","........################...##...","........#######....#####...##...",".......###.##.......#####...##..",".......##..##........#####...#..",".......#....#........#..##......","......##....#........#...#......","......##....#.......##...#......","......#....##.......#....##.....","....###...###......##...###.....",".....#.....##......#....##......"];
+const HORSE_SCALE=1.6,HORSE_HALF_W=26,HORSE_HALF_H=20;
 function horse(x,y,rgb){
-  c.save();c.translate(Math.round(x-32),Math.round(y-23));
+  c.save();c.translate(Math.round(x-25.6),Math.round(y-20));
   c.fillStyle='#14110f';
   for(let py=0;py<HORSE_B.length;py++){
     const row=HORSE_B[py];
-    for(let px=0;px<row.length;px++)if(row[px]==='#')c.fillRect(px*2,py*2,2,2);
+    for(let px=0;px<row.length;px++)if(row[px]==='#'){
+      const x0=Math.round(px*HORSE_SCALE),y0=Math.round(py*HORSE_SCALE);
+      c.fillRect(x0,y0,Math.round((px+1)*HORSE_SCALE)-x0,Math.round((py+1)*HORSE_SCALE)-y0);
+    }
   }
   c.restore();
 }
@@ -110,9 +113,40 @@ function territoryOutline(id){
 }
 function horseOffsets(n){
   if(n<=1)return [[0,0]];
-  if(n===2)return [[-19,-10],[19,10]];
-  if(n===3)return [[-19,-13],[19,-13],[0,16]];
-  return Array.from({length:n},(_,i)=>[(i%3-1)*22,(Math.floor(i/3)-.5)*24]);
+  if(n===2)return [[-23,-12],[23,12]];
+  if(n===3)return [[-24,-16],[24,-16],[0,19]];
+  return Array.from({length:n},(_,i)=>[(i%3-1)*30,(Math.floor(i/3)-.5)*28]);
+}
+function horseRect(x,y){return [x-HORSE_HALF_W,y-HORSE_HALF_H,x+HORSE_HALF_W,y+HORSE_HALF_H];}
+function overlap(a,b){return Math.max(0,Math.min(a[2],b[2])-Math.max(a[0],b[0]))*Math.max(0,Math.min(a[3],b[3])-Math.max(a[1],b[1]));}
+function castleExclusionRects(){
+  return IDS.filter(id=>state.provinces[id].home_castle||state.provinces[id].secondary_castle).map(id=>{
+    const [x,y]=mapInfo?.type==='random'?mapInfo.castles[id]:CASTLE_POS[id];
+    return [x-20,y-18,x+20,y+24];
+  });
+}
+function placeHorse(id,pt,offset,castles,placed){
+  const [ax,ay]=pt,[dx,dy]=offset,tx=ax+dx,ty=ay+dy;
+  const [fx,fy]=sherwoodCenter(),forest=[fx-47,fy-30,fx+47,fy+25];
+  let best=null;
+  const consider=(x,y)=>{
+    const box=horseRect(x,y);
+    if(box[0]<40||box[2]>812||box[1]<140||box[3]>930||castles.some(b=>overlap(box,b)))return;
+    const center=provinceAt(x,y)===id;
+    const samples=[[-20,-15],[20,-15],[-20,15],[20,15],[-20,0],[20,0],[0,-15],[0,15]];
+    const outside=samples.reduce((n,[sx,sy])=>n+(provinceAt(x+sx,y+sy)!==id),0);
+    const horseOverlap=placed.reduce((n,b)=>n+overlap(box,b),0);
+    const score=(center?0:25000)+outside*220+horseOverlap*6+overlap(box,forest)*3+Math.hypot(x-tx,y-ty)*5+Math.hypot(x-ax,y-ay)*2;
+    if(!best||score<best.score)best={x,y,box,score,center};
+  };
+  consider(tx,ty);
+  for(let oy=-96;oy<=96;oy+=6)for(let ox=-96;ox<=96;ox+=6)consider(ax+ox,ay+oy);
+  if(!best||!best.center){
+    for(let oy=-156;oy<=156;oy+=6)for(let ox=-156;ox<=156;ox+=6)consider(ax+ox,ay+oy);
+  }
+  // Never draw a horse over a castle, even on an unusually narrow random map.
+  if(!best)for(let y=166;y<=900;y+=12)for(let x=70;x<=780;x+=12)consider(x,y);
+  return best;
 }
 function renderMap(){if(!state){c.drawImage(img['board.png'],0,0);return;}if(visualOwners){let saved=state.provinces;let hold={};for(let id of IDS){hold[id]=saved[id].owner;if(id in visualOwners)saved[id].owner=visualOwners[id];}coloredMapKey='';c.drawImage(coloredBoard(),0,0);for(let id of IDS)saved[id].owner=hold[id];coloredMapKey='';}else c.drawImage(coloredBoard(),0,0);
   const byTerritory=new Map();
@@ -124,11 +158,12 @@ function renderMap(){if(!state){c.drawImage(img['board.png'],0,0);return;}if(vis
     if(!byTerritory.has(id))byTerritory.set(id,[]);
     byTerritory.get(id).push({l,pt});
   }
-  for(const group of byTerritory.values()){
+  const castleRects=castleExclusionRects(),placed=[];
+  for(const [id,group] of byTerritory){
     const spreads=horseOffsets(group.length);
     group.forEach(({l,pt},i)=>{
-      const [dx,dy]=spreads[i];
-      horse(pt[0]+dx,pt[1]+dy,state.colors[l]||[120,155,220]);
+      const p=placeHorse(id,pt,spreads[i],castleRects,placed);
+      if(p){placed.push(p.box);horse(p.x,p.y,state.colors[l]||[120,155,220]);}
     });
   }
   if(selected>0&&['read','move','castle_pick','battle','passage'].includes(mode))c.drawImage(territoryOutline(selected),0,0);
@@ -209,7 +244,7 @@ function sceneShow(file,returnMode=mode,notice='',noticeBack=returnMode,overlay=
 function showEnding(){
   if(state.outcome==='victory'){
     storyBegin([
-      ['text','The Norman lords have fallen. Thy banners fly above their castles, and the crown of England is thine.'],
+      ['text','The last Norman lord has fallen! England is freed from Norman rule, and the crown is thine.'],
       ['scene','the_end.png'],
       ['text','Thy conquest is complete. A new reign begins.']
     ],'setup');
@@ -218,21 +253,21 @@ function showEnding(){
   }
 }
 function storyBegin(steps,ending='orders'){story=steps;storyEnd=ending;storyNext();}
-function storyNext(){if(!story.length){mode=storyEnd==='orders'?'orders':storyEnd;render();return;}let [kind,payload]=story.shift();if(kind==='text')alertText(payload,'__story__');else if(kind==='scene')sceneShow(payload,'__story__');else if(kind==='action'){if(payload==='union'){state.maidenUnion(pendingMaiden);pendingMaiden=null;}storyNext();}}
-function enterOrders(begin=false){mode='orders';selected=0;if(begin){const ally=state.maidenCandidate();if(ally){pendingMaiden=ally;mode='maiden_offer';state.tournament_pending=false;}else if(state.tournament_pending&&!state.tournament_held){mode='tournament_offer';}}render();}
+function storyNext(){if(!story.length){if(storyEnd==='orders'){enterOrders(false);return;}mode=storyEnd;render();return;}let [kind,payload]=story.shift();if(kind==='text')alertText(payload,'__story__');else if(kind==='scene')sceneShow(payload,'__story__');else if(kind==='action'){if(payload==='union'){state.maidenUnion(pendingMaiden);pendingMaiden=null;}storyNext();}}
+function enterOrders(begin=false){if(state.checkEnd()){showEnding();return;}mode='orders';selected=0;if(begin){const ally=state.maidenCandidate();if(ally){pendingMaiden=ally;mode='maiden_offer';state.tournament_pending=false;}else if(state.tournament_pending&&!state.tournament_held){mode='tournament_offer';}}render();}
 function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='random'?randomMap(seed):null;state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';coloredMapKey='';visualOwners=null;visualHorsePos=null;visualAlive=null;guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
 function costOf(){return U.reduce((n,u)=>n+quantity[u]*PRICES[u],0)+(wantCastle?20:0);}
 function clearQty(){quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;}
-function finishTurn(msg){
+function finishTurn(msg,defer=false){
+  state.checkEnd();
   summary=[SHORT[state.human]+': '+msg];
   queue=Object.keys(state.lords).filter(l=>l!==state.human&&state.lords[l].alive);
   state.rng.shuffle(queue);queueIndex=0;
   aiMessage='The other lords prepare their orders.';mode='ai_phase';render();
-  if(!state.outcome)setTimeout(nextAiStep,350);
-  else if(!pendingHumanFlash)setTimeout(nextAiStep,200);
+  if(!defer)setTimeout(nextAiStep,state.outcome?200:350);
 }
 function showFlash(id,onDone){flashId=id;flashVisible=false;let ticks=0;let interval=setInterval(()=>{flashVisible=!flashVisible;render();if(++ticks===4){clearInterval(interval);flashId=0;flashVisible=false;visualOwners=null;visualHorsePos=null;visualAlive=null;coloredMapKey='';render();onDone?.();}},115);}
-function nextAiStep(){if(mode!=='ai_phase'||aiRunning)return;if(pendingHumanFlash){let id=pendingHumanFlash;pendingHumanFlash=0;showFlash(id,()=>{if(state.outcome)showEnding();else setTimeout(nextAiStep,250);});return;}if(state.outcome){showEnding();return;}aiRunning=true;let loop=()=>{if(mode!=='ai_phase'){aiRunning=false;return;}if(queueIndex>=queue.length||state.outcome){let events='';if(!state.outcome){events=state.randomEvent();if(events)summary.push(events);let rec=state.advanceMonth();summary.push(`Taxes: +${rec[state.human]||0} gold to ${SHORT[state.human]}.`);let rivalry=state.possiblyRivalry();if(rivalry)summary.push(rivalry);state.checkEnd();if(!state.outcome&&!state.tournament_held&&!state.tournament_pending&&!state.maidenCandidate()&&state.rng.random()<.10)state.tournament_pending=true;}mode='report';reportScroll=0;aiRunning=false;render();return;}
+function nextAiStep(){if(mode!=='ai_phase'||aiRunning)return;if(pendingHumanFlash){let id=pendingHumanFlash;pendingHumanFlash=0;showFlash(id,()=>{if(state.outcome)showEnding();else setTimeout(nextAiStep,250);});return;}if(state.outcome){showEnding();return;}aiRunning=true;let loop=()=>{if(mode!=='ai_phase'){aiRunning=false;return;}if(queueIndex>=queue.length||state.outcome){if(state.outcome==='victory'){aiRunning=false;showEnding();return;}let events='';if(!state.outcome){events=state.randomEvent();if(events)summary.push(events);let rec=state.advanceMonth();summary.push(`Taxes: +${rec[state.human]||0} gold to ${SHORT[state.human]}.`);let rivalry=state.possiblyRivalry();if(rivalry)summary.push(rivalry);state.checkEnd();if(!state.outcome&&!state.tournament_held&&!state.tournament_pending&&!state.maidenCandidate()&&state.rng.random()<.10)state.tournament_pending=true;}mode='report';reportScroll=0;aiRunning=false;render();return;}
     let l=queue[queueIndex++],home=state.lords[state.human].home_province,beforeOwner=state.provinces[home].owner;let owners=Object.fromEntries(IDS.map(id=>[id,state.provinces[id].owner]));let oldHorse=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.campaign_province]));let oldAlive=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.alive]));let msg=state.aiOne(l),target=state.last_battle_target;summary.push(msg||`${SHORT[l]}: No action.`);aiMessage=msg;let changed=IDS.find(id=>owners[id]!==state.provinces[id].owner&&state.provinces[id].owner===l);if(!target&&changed)target=changed;
     if(target&&owners[target]){visualOwners=owners;visualHorsePos=oldHorse;visualAlive=oldAlive;if(target===home&&beforeOwner===state.human){let won=state.provinces[home].owner===state.human;pendingHomeAttack={attacker:l,target,won};aiRunning=false;sceneShow('home_castle_under_attack.png','__home_attack_intro__');return;}}
     render();if(target&&owners[target])showFlash(target,()=>setTimeout(loop,300));else setTimeout(loop,300);
@@ -311,7 +346,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k.startsWith('tactic:')){tactic=k.split(':').slice(1).join(':');return;}
   if(k==='pass_safe'){state.move(state.human,pendingTarget,'Stand and Fight',true);mode='move';selected=pendingTarget;pendingTarget=null;return;}
   if(k==='pass_attack'){attackingAlly=true;if(COUNT(state.defenders(pendingTarget))===0){const id=pendingTarget,r=state.move(state.human,id,'Stand and Fight',false);visualOwners=null;visualHorsePos=null;visualAlive=null;pendingHumanFlash=0;coloredMapKey='';attackingAlly=false;pendingTarget=null;finishTurn(r.text);return;}mode='battle';tactic='Stand and Fight';return;}
-  if(k==='fight'){let id=pendingTarget,isCastle=state.provinces[id].home_castle||state.provinces[id].secondary_castle,fac=state.lords[state.provinces[id].owner]?.faction;let owners=Object.fromEntries(IDS.map(n=>[n,state.provinces[n].owner]));let oldHorse=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.campaign_province]));let oldAlive=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.alive]));let r=state.move(state.human,id,tactic,!attackingAlly);visualOwners=owners;visualHorsePos=oldHorse;visualAlive=oldAlive;pendingHumanFlash=id;attackingAlly=false;pendingTarget=null;finishTurn(r.text);if(isCastle)sceneShow(fac==='Norman'?'norman_castle.png':'saxon_castle.png','__resume_ai__');return;}
+  if(k==='fight'){let id=pendingTarget,isCastle=state.provinces[id].home_castle||state.provinces[id].secondary_castle,fac=state.lords[state.provinces[id].owner]?.faction;let owners=Object.fromEntries(IDS.map(n=>[n,state.provinces[n].owner]));let oldHorse=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.campaign_province]));let oldAlive=Object.fromEntries(Object.entries(state.lords).map(([n,p])=>[n,p.alive]));let r=state.move(state.human,id,tactic,!attackingAlly);visualOwners=owners;visualHorsePos=oldHorse;visualAlive=oldAlive;pendingHumanFlash=id;attackingAlly=false;pendingTarget=null;finishTurn(r.text,Boolean(isCastle));if(isCastle)sceneShow(fac==='Norman'?'norman_castle.png':'saxon_castle.png','__resume_ai__');return;}
 }
 function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){let id=selectedCastle,pr=state.provinces[id];if(!id||pr.owner!==state.human||pr.home_castle||pr.secondary_castle)throw Error('Choose an owned province without a castle');}let cost=costOf();if(COUNT(quantity))state.purchase(state.human,quantity);if(wantCastle)state.purchaseCastle(state.human,selectedCastle,true);clearQty();finishTurn(`Army purchased for ${cost} gold.`);}
 function randomMap(seed){let rng=new Rng(seed),w=213,h=232,cells=new Uint8Array(w*h),ids=[...IDS],points=[],cx=106,cy=121;
