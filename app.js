@@ -1,4 +1,4 @@
-import {randomMap} from './random-map.js';
+import {randomMap,uploadedMap} from './random-map.js';
 import {CrownState,Rng,T,IDS,SAXONS,NORMANS,SHORT,TIERS,LEAD,START_RANK,COLORS,HORSES,CASTLE_POS,PRICES,U,SUMMARY,COUNT,MONTH,ENGLAND,CASTLES} from './engine.js';
 const W=852,H=1846,A='assets/';const gameCanvas=document.getElementById('game'),c=gameCanvas.getContext('2d',{alpha:false});
 const color=(a)=>`rgb(${a.join(',')})`;const INK='#432018',LIGHT='#663021',BEIGE='#d3ab73';
@@ -9,6 +9,7 @@ let message='',backMode='orders',scene='',sceneReturn='orders',sceneNotice='',sc
 let queue=[],queueIndex=0,aiMessage='',aiRunning=false,pendingHomeAttack=null,pendingHumanFlash=0,lastSceneBefore='';let coloredMap=null,coloredMapKey='',tapActive=false;
 let noticePortrait=null,englandSelectionMask=null,horseHitTargets=[];
 const outlineCache=new Map();
+let uploadLand=null,uploadPreview=null,acceptedUpload=null,uploadError='',uploadBusy=false,uploadTicket=0;
 function loadImage(file){return new Promise((resolve,reject)=>{let im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Failed loading '+file));im.src=A+(assetMap[file]||file);});}
 async function loadAssets(){let all=['board.png','font_atlas.png','hitmask.png','paint_alpha.png','title_splash.png','robin_sherwood.png','norman_castle.png','saxon_castle.png','maiden_swordfight.png','lady_catherine.png','the_end.png','tournament_joust.png','tournament_trumpets.png','home_castle_under_attack.png','home_castle_fallen.png'];
   all.push(...['wilfred','cedric','geoffrey','wolfric','robin','brian','edmund','philip','roger','reginald'].map(p=>'portrait_'+p+'.png'));
@@ -57,8 +58,8 @@ function horse(x,y,rgb){
 }
 const cachedCanvas=document.createElement('canvas');cachedCanvas.width=W;cachedCanvas.height=H;let cachedCtx=cachedCanvas.getContext('2d');
 function sherwoodCenter(){return mapInfo?.type==='random'?(mapInfo.forest||[474,330]):[474,330];}
-function drawSherwood(ctx){
-  const [fx,fy]=sherwoodCenter();
+function drawSherwood(ctx,center=sherwoodCenter()){
+  const [fx,fy]=center;
   ctx.save();ctx.translate(Math.round(fx),Math.round(fy));
   const px=(x,y,w,h,col)=>{ctx.fillStyle=col;ctx.fillRect(x,y,w,h);};
   px(-45,3,89,9,'#123922');px(-39,12,77,5,'#0c2419');
@@ -236,7 +237,108 @@ function renderMap(){horseHitTargets=[];if(!state){c.drawImage(img['board.png'],
   if(flashVisible&&flashId){let mask=mapInfo?.type==='random'?null:hitData;if(mask){c.fillStyle='rgba(255,205,104,.30)';for(let y=140;y<950;y+=4)for(let x=40;x<820;x+=4){if(englandSelectionMask[y*W+x]===flashId)c.fillRect(x,y,4,4);}}else c.drawImage(territoryOutline(flashId),0,0);}
 }
 function fullScreen(file,overlay=''){c.fillStyle='#000';c.fillRect(0,0,W,H);let im=img[file];let ratio=Math.min(W/im.width,(H-220)/im.height),dw=im.width*ratio,dh=im.height*ratio,dx=(W-dw)/2,dy=(H-dh)/2;c.imageSmoothingEnabled=file==='home_castle_under_attack.png'||file==='home_castle_fallen.png'?false:true;c.drawImage(im,dx,dy,dw,dh);c.imageSmoothingEnabled=true;if(overlay==='The End'){text('The End',192,720,'title','#150a07','center');text('The End',188,716,'title','#edcf87','center');}}
-function renderSetup(){c.drawImage(img['board.png'],0,0);c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);text('A Kingdom Awaits',426,111,'title',INK,'center');text('Choose thy lord and destiny',426,183,'small',LIGHT,'center');rule(232);text('I. Choose Thy Saxon Lord',426,252,'name',INK,'center');let lords=['Wolfric the Wild','Geoffrey Longsword','Cedric of Rotherwood','Wilfred of Ivanhoe'];lords.forEach((l,i)=>{let x=65+188*i,y=315,im=portraitPath(l),w=161,h=199,active=options.character===l;c.fillStyle=active?'#e0aa55':'#855632';c.fillRect(x-8,y-8,w+16,h+16);c.drawImage(im,x,y,w,h);c.lineWidth=active?6:4;c.strokeStyle=active?'#ffe088':'#4d2714';c.strokeRect(x,y,w,h);buttons.push({key:'setup_lord:'+l,rect:[x-8,y-8,x+w+8,651]});text(SHORT[l],x+w/2,530,'small',INK,'center');text(START_RANK[l],x+w/2,578,'small',LIGHT,'center');});button('setup_lord:random','Random Lord',[122,670,730,742],'body',options.character===null);rule(772);text('II. Choose Thy Challenge',426,796,'name',INK,'center');[['easy','Noble Quest','Two Saxon allies; rescue available'],['medium','Norman Peril','One Saxon ally; one lord turns Norman'],['hard','The Last Saxon','No Saxon allies; no maiden rescue']].forEach(([key,title,desc],i)=>{let y=854+i*116;button('setup_difficulty:'+key,title,[122,y,730,y+72],'body',options.difficulty===key);text(desc,426,y+76,'small',LIGHT,'center');});rule(1215);text('III. Choose Thy Kingdom',426,1236,'name',INK,'center');button('setup_map:england','England - Original Map',[122,1323,730,1395],'body',options.map==='england');button('setup_map:random','Random Kingdom',[122,1420,730,1492],'body',options.map==='random');text('A different realm with each new campaign',426,1510,'small',LIGHT,'center');rule(1590);button('setup_begin','Begin Campaign',[122,1646,730,1720]);}
+
+// An uploaded drawing is decoded locally. No image data is transmitted.
+const mapPicker=document.createElement('input');
+mapPicker.type='file';mapPicker.accept='image/*';mapPicker.hidden=true;document.body.appendChild(mapPicker);
+function openMapPicker(){mapPicker.value='';mapPicker.click();}
+const newMapSeed=()=>Math.floor(Math.random()*4294967296)>>>0;
+function readMapImage(file){
+ return new Promise((resolve,reject)=>{
+  const url=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{try{resolve(extractLand(im));}catch(e){reject(e);}finally{URL.revokeObjectURL(url);}};
+  im.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Could not read this image. Try a PNG or JPEG.'));};
+  im.src=url;
+ });
+}
+function extractLand(im){
+ const cv=document.createElement('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
+ const scale=Math.min(1,1100/Math.max(im.naturalWidth,im.naturalHeight));
+ cv.width=Math.max(1,Math.round(im.naturalWidth*scale));cv.height=Math.max(1,Math.round(im.naturalHeight*scale));
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(im,0,0,cv.width,cv.height);
+ const w=cv.width,h=cv.height,data=ctx.getImageData(0,0,w,h).data;
+ // Estimate the plain background from small corner patches, robust to a stray mark.
+ const samples=[[],[],[]],patch=Math.max(1,Math.min(12,w,h));
+ for(const [ox,oy] of [[0,0],[w-patch,0],[0,h-patch],[w-patch,h-patch]])for(let y=oy;y<oy+patch;y++)for(let x=ox;x<ox+patch;x++)for(let ch=0;ch<3;ch++)samples[ch].push(data[(y*w+x)*4+ch]);
+ const bg=samples.map(a=>a.sort((a,b)=>a-b)[a.length>>1]);
+ const isInk=(d,i)=>Math.max(Math.abs(d[i]-bg[0]),Math.abs(d[i+1]-bg[1]),Math.abs(d[i+2]-bg[2]))>85;
+ let x0=w,y0=h,x1=-1,y1=-1;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(isInk(data,(y*w+x)*4)){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);}
+ if(x1-x0<20||y1-y0<20)throw Error('No clear island outline found. Draw a closed line on a plain background.');
+ // Fit proportionally in the same 213 x 232 cell grid used by random maps.
+ const sw=x1-x0+1,sh=y1-y0+1,factor=Math.min(164/sw,178/sh),tw=Math.max(1,Math.round(sw*factor)),th=Math.max(1,Math.round(sh*factor));
+ const pad=6,gw=tw*3+2*pad,gh=th*3+2*pad,tmp=document.createElement('canvas');
+ tmp.width=gw;tmp.height=gh;const tx=tmp.getContext('2d',{willReadFrequently:true});
+ tx.fillStyle='rgb('+bg.join(',')+')';tx.fillRect(0,0,gw,gh);tx.drawImage(cv,x0,y0,sw,sh,pad,pad,tw*3,th*3);
+ const pixels=tx.getImageData(0,0,gw,gh).data,ink=new Uint8Array(gw*gh);
+ for(let i=0;i<ink.length;i++)ink[i]=isInk(pixels,4*i)?1:0;
+ // A two-pixel morphological closing at 3x resolution bridges tiny line gaps.
+ const steps=[-gw,gw,-1,1];
+ function morph(a,dilate){const b=new Uint8Array(a.length);for(let y=1;y<gh-1;y++)for(let x=1;x<gw-1;x++){let i=y*gw+x,v=a[i];for(const d of steps)v=dilate?v|a[i+d]:v&a[i+d];b[i]=v;}return b;}
+ const boundary=morph(morph(morph(morph(ink,true),true),false),false);
+ // Label all four-connected non-line areas. The largest enclosed area is land;
+ // exterior and other enclosed areas (lakes) remain water.
+ const labels=new Int32Array(boundary.length),queue=new Int32Array(boundary.length);
+ let label=0,best=0,bestSize=0;
+ for(let i=0;i<boundary.length;i++){
+  if(boundary[i]||labels[i])continue;
+  label++;let head=0,tail=1,exterior=false;queue[0]=i;labels[i]=label;
+  while(head<tail){const j=queue[head++],x=j%gw,y=j/gw|0;
+   if(x===0||x===gw-1||y===0||y===gh-1)exterior=true;
+   for(const d of steps){if((d===-1&&x===0)||(d===1&&x===gw-1))continue;const k=j+d;if(k<0||k>=boundary.length||boundary[k]||labels[k])continue;labels[k]=label;queue[tail++]=k;}
+  }
+  if(!exterior&&tail>bestSize){best=label;bestSize=tail;}
+ }
+ if(!best)throw Error('The coastline is open. Close all gaps in the outline and try again.');
+ const land=new Uint8Array(213*232),left=Math.floor((213-tw)/2),top=44+Math.floor((178-th)/2);
+ for(let y=0;y<th;y++)for(let x=0;x<tw;x++)if(labels[(pad+y*3+1)*gw+pad+x*3+1]===best)land[(top+y)*213+left+x]=1;
+ // Drop only detached raster fragments caused by downsampling; large disconnected
+ // pieces are rejected so the game never creates unreachable territories.
+ const seen=new Uint8Array(land.length),q=new Int32Array(land.length);let largest=[],total=0;
+ for(let i=0;i<land.length;i++){if(!land[i]||seen[i])continue;let head=0,tail=1;q[0]=i;seen[i]=1;while(head<tail){const j=q[head++];for(const d of [-213,213,-1,1]){const k=j+d;if(k>=0&&k<land.length&&land[k]&&!seen[k]){seen[k]=1;q[tail++]=k;}}}total+=tail;if(tail>largest.length)largest=Array.from(q.subarray(0,tail));}
+ if(total-largest.length>Math.max(20,total*.01))throw Error('The island has disconnected land. Widen its narrow passages.');
+ land.fill(0);for(const i of largest)land[i]=1;
+ if(largest.length<4500)throw Error('The island is too small or narrow. Draw a wider outline with room for territories.');
+ return land;
+}
+function generateUpload(){
+ const ticket=++uploadTicket;uploadBusy=true;uploadError='';uploadPreview=null;mode='upload_preview';render();
+ // Yield once so the preview can display the generation message.
+ setTimeout(()=>{if(ticket!==uploadTicket)return;try{uploadPreview=uploadedMap(newMapSeed(),uploadLand);}catch(e){uploadError=e.message;}finally{uploadBusy=false;render();}},40);
+}
+mapPicker.addEventListener('change',async()=>{
+ const file=mapPicker.files?.[0];if(!file)return;
+ const ticket=++uploadTicket;uploadBusy=true;uploadError='';uploadLand=null;uploadPreview=null;mode='upload_preview';render();
+ try{const land=await readMapImage(file);if(ticket!==uploadTicket)return;uploadLand=land;generateUpload();}
+ catch(e){if(ticket!==uploadTicket)return;uploadError=e.message;uploadBusy=false;render();}
+});
+function renderUploadPreview(){
+ c.drawImage(img['board.png'],0,0);c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);
+ text('Thy New Kingdom',426,111,'title',INK,'center');rule(210);
+ if(uploadPreview){
+  const m=uploadPreview,palette=['#b49b6b','#c9b47b','#aeb382','#c3a27b','#b9bc8e','#d3bc91'];
+  // A neutral preview of the actual territory grid; faction colors are assigned in game.
+  c.save();c.translate(0,100);for(let y=0;y<m.h;y++)for(let x=0;x<m.w;x++){
+   const i=y*m.w+x,id=m.cells[i];if(!id)continue;
+   const edge=m.cells[i-1]!==id||m.cells[i+1]!==id||m.cells[i-m.w]!==id||m.cells[i+m.w]!==id;
+   c.fillStyle=edge?'#493323':palette[id%palette.length];c.fillRect(x*4,y*4,4,4);
+  }
+  for(const id of CASTLES){const [x,y]=m.castles[id];castleGraphic(id,x,y);}
+  drawSherwood(c,m.forest);c.restore();
+  text('18 Territories - 6 Lords',426,1070,'body',INK,'center');
+  text('The coastline and lakes are preserved.',426,1140,'small',LIGHT,'center');
+  button('upload_accept','Accept Kingdom',[122,1250,730,1332]);
+ }else{
+  const notice=uploadBusy?'Creating thy kingdom...':(uploadError||'Choose an image of a closed island outline.');
+  let y=400;for(const line of wrap(notice,'body',615)){text(line,426,y,'body',INK,'center');y+=72;}
+  if(!uploadBusy){let y=850;for(const line of wrap('Use a plain background, a contrasting closed coastline, and optional enclosed lakes.','small',615)){text(line,426,y,'small',LIGHT,'center');y+=54;}}
+ }
+ if(!uploadBusy&&uploadLand)button('upload_regenerate','Regenerate Territories',[122,1360,730,1442]);
+ if(!uploadBusy)button('upload_another','Upload Another Map',[122,1470,730,1552]);
+ button('upload_back','Back',[122,1620,730,1702]);
+}
+
+function renderSetup(){c.drawImage(img['board.png'],0,0);c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);text('A Kingdom Awaits',426,111,'title',INK,'center');text('Choose thy lord and destiny',426,183,'small',LIGHT,'center');rule(232);text('I. Choose Thy Saxon Lord',426,252,'name',INK,'center');let lords=['Wolfric the Wild','Geoffrey Longsword','Cedric of Rotherwood','Wilfred of Ivanhoe'];lords.forEach((l,i)=>{let x=65+188*i,y=315,im=portraitPath(l),w=161,h=199,active=options.character===l;c.fillStyle=active?'#e0aa55':'#855632';c.fillRect(x-8,y-8,w+16,h+16);c.drawImage(im,x,y,w,h);c.lineWidth=active?6:4;c.strokeStyle=active?'#ffe088':'#4d2714';c.strokeRect(x,y,w,h);buttons.push({key:'setup_lord:'+l,rect:[x-8,y-8,x+w+8,651]});text(SHORT[l],x+w/2,530,'small',INK,'center');text(START_RANK[l],x+w/2,578,'small',LIGHT,'center');});button('setup_lord:random','Random Lord',[122,670,730,742],'body',options.character===null);rule(772);text('II. Choose Thy Challenge',426,796,'name',INK,'center');[['easy','Noble Quest','Two Saxon allies; rescue available'],['medium','Norman Peril','One Saxon ally; one lord turns Norman'],['hard','The Last Saxon','No Saxon allies; no maiden rescue']].forEach(([key,title,desc],i)=>{let y=854+i*116;button('setup_difficulty:'+key,title,[122,y,730,y+72],'body',options.difficulty===key);text(desc,426,y+76,'small',LIGHT,'center');});rule(1215);text('III. Choose Thy Kingdom',426,1236,'name',INK,'center');button('setup_map:england','England - Original Map',[122,1323,730,1395],'body',options.map==='england');button('setup_map:random','Random Kingdom',[122,1420,730,1492],'body',options.map==='random');button('setup_map:upload','Upload Map',[122,1510,730,1582],'body',options.map==='upload');rule(1610);button('setup_begin','Begin Campaign',[122,1646,730,1720]);}
 function drawOrders(){header('Your orders?',status());[['conquest','Seek Conquest',1186],['army','Build Army',1284],['read','Read Map',1382],['end','End Month',1484],['history','History',1570]].forEach(([k,s,y])=>button(k,s,[85,y,505,y+82]));drawPortrait(state.human,[565,1140,751,1350]);text('Leadership',658,1396,'small',LIGHT,'center');text(state.rank(state.human),658,1450,'small',INK,'center');let p=state.lords[state.human];if(p.spouse){drawPortrait('Lady Catherine',[565,1494,751,1704]);text(`${SHORT[state.human]} of ${T[p.home_province][0]}`,285,1697,'small',INK,'center');}else fit(`${SHORT[state.human]} of ${T[p.home_province][0]}  /  Robin: ${p.robin_uses_remaining}`,426,1690);}
 function drawRead(){
   header('Read Map','Tap any territory above');
@@ -341,7 +443,7 @@ function drawInvitation(maiden){
 }
 function drawAi(){header('The Lords Take Their Turns',status());lines([aiMessage||'The other lords prepare their orders.'],1260,70,'small');}
 function drawGuide(){if(guide==='off'||!['orders','conquest','transfer','move'].includes(mode))return;let target={conquest:'conquest',transfer:'transfer',plus:'plus:soldiers',confirm:'transfer_confirm',move:'move'}[guide],btn=buttons.find(b=>b.key===target);let x,y;if(guide==='province'){let pt=mapInfo?.type==='random'?mapInfo.horses[guideTarget]:HORSES[guideTarget];if(!pt)return;[x,y]=pt;y-=37;}else if(btn){x=(btn.rect[0]+btn.rect[2])/2;y=btn.rect[1]-23;}else return;c.fillStyle='#ffd34f';c.strokeStyle='#5e3513';c.lineWidth=4;let dy=Math.sin(guideTicks/3)*8;c.beginPath();c.moveTo(x-18,y-35+dy);c.lineTo(x+18,y-35+dy);c.lineTo(x+18,y-10+dy);c.lineTo(x+29,y-10+dy);c.lineTo(x,y+17+dy);c.lineTo(x-29,y-10+dy);c.lineTo(x-18,y-10+dy);c.closePath();c.fill();c.stroke();}
-function render(){if(!fontMetrics)return;buttons.length=0;c.clearRect(0,0,W,H);if(mode==='splash'){fullScreen('title_splash.png');return;}if(mode==='scene'){fullScreen(scene,sceneOverlay);return;}if(mode==='setup'){renderSetup();return;}renderMap();switch(mode){case 'orders':drawOrders();break;case 'read':drawRead();break;case 'conquest':drawConquest();break;case 'army':drawArmy();break;case 'castle_pick':drawCastlePick();break;case 'transfer':drawTransfer();break;case 'move':drawMove();break;case 'battle':drawBattle();break;case 'passage':drawPassage();break;case 'report':drawReport();break;case 'history':drawHistory();break;case 'accounts':drawAccounts();break;case 'notice':drawNotice();break;case 'tournament_offer':drawInvitation(false);break;case 'maiden_offer':drawInvitation(true);break;case 'ai_phase':drawAi();break;}drawGuide();}
+function render(){if(!fontMetrics)return;buttons.length=0;c.clearRect(0,0,W,H);if(mode==='splash'){fullScreen('title_splash.png');return;}if(mode==='scene'){fullScreen(scene,sceneOverlay);return;}if(mode==='setup'){renderSetup();return;}if(mode==='upload_preview'){renderUploadPreview();return;}renderMap();switch(mode){case 'orders':drawOrders();break;case 'read':drawRead();break;case 'conquest':drawConquest();break;case 'army':drawArmy();break;case 'castle_pick':drawCastlePick();break;case 'transfer':drawTransfer();break;case 'move':drawMove();break;case 'battle':drawBattle();break;case 'passage':drawPassage();break;case 'report':drawReport();break;case 'history':drawHistory();break;case 'accounts':drawAccounts();break;case 'notice':drawNotice();break;case 'tournament_offer':drawInvitation(false);break;case 'maiden_offer':drawInvitation(true);break;case 'ai_phase':drawAi();break;}drawGuide();}
 function alertText(s,back=mode,face=null){message=s;backMode=back;noticePortrait=face;mode='notice';render();}
 function sceneShow(file,returnMode=mode,notice='',noticeBack=returnMode,overlay=''){scene=file;sceneReturn=returnMode;sceneNotice=notice;sceneNoticeBack=noticeBack;sceneOverlay=overlay;mode='scene';render();}
 function showEnding(){
@@ -358,7 +460,7 @@ function showEnding(){
 function storyBegin(steps,ending='orders'){story=steps;storyEnd=ending;storyNext();}
 function storyNext(){if(!story.length){if(storyEnd==='orders'){enterOrders(false);return;}mode=storyEnd;render();return;}let [kind,payload]=story.shift();if(kind==='text')alertText(payload,'__story__');else if(kind==='scene')sceneShow(payload,'__story__');else if(kind==='action'){if(payload==='union'){state.maidenUnion(pendingMaiden);pendingMaiden=null;}storyNext();}}
 function enterOrders(begin=false){if(state.checkEnd()){showEnding();return;}mode='orders';selected=0;if(begin){const ally=state.maidenCandidate();if(ally){pendingMaiden=ally;mode='maiden_offer';state.tournament_pending=false;}else if(state.tournament_pending&&!state.tournament_held){mode='tournament_offer';}}render();}
-function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='random'?randomMap(seed):null;state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';coloredMapKey='';visualOwners=null;visualHorsePos=null;visualAlive=null;guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
+function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='upload'?acceptedUpload:options.map==='random'?randomMap(seed):null;if(options.map==='upload'&&!mapInfo)throw Error('Choose an uploaded kingdom first.');outlineCache.clear();state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';coloredMapKey='';visualOwners=null;visualHorsePos=null;visualAlive=null;guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
 function costOf(){return U.reduce((n,u)=>n+quantity[u]*PRICES[u],0)+(wantCastle?20:0);}
 function clearQty(){quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;}
 function finishTurn(msg,defer=false){
@@ -399,7 +501,8 @@ function guideTap(key){
 }
 function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(mode==='scene'){let back=sceneReturn;if(sceneNotice){let n=sceneNotice,b=sceneNoticeBack;sceneNotice='';alertText(n,b,/Robin pledges/.test(n)?'Robin Hood':null);return;}if(back==='__story__')storyNext();else if(back==='__new_campaign__'){mode='setup';render();}else if(back==='__home_attack_intro__')afterHomeIntro();else if(back==='__resume_ai__')resumeAi();else{mode=back;render();}return;}if(mode==='ai_phase')return;
   let key=buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key;
-  if(key){try{action(key);}catch(e){console.error(e);alertText(e.message);}render();if(!['ai_phase'].includes(mode))return;}
+  if(key){try{action(key);}catch(e){console.error(e);if(mode==='setup'||mode==='upload_preview'){uploadError=e.message;uploadBusy=false;mode='upload_preview';}else alertText(e.message);}render();if(!['ai_phase'].includes(mode))return;}
+  if(mode==='setup'||mode==='upload_preview')return;
   const artworkTarget=castleHitAt(x,y)||horseHitAt(x,y);
   if(!artworkTarget&&isSherwood(x,y)){
     const returnTo=mode;
@@ -429,7 +532,8 @@ function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(m
     if(state.friendly(state.human,owner)){mode='passage';render();return;}mode='battle';tactic='Stand and Fight';render();
   }
 }
-function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.character=k.endsWith(':random')?null:k.split(':').slice(1).join(':');else if(k.startsWith('setup_difficulty:'))options.difficulty=k.split(':')[1];else if(k.startsWith('setup_map:'))options.map=k.split(':')[1];else if(k==='setup_begin')startCampaign();return;}
+function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.character=k.endsWith(':random')?null:k.split(':').slice(1).join(':');else if(k.startsWith('setup_difficulty:'))options.difficulty=k.split(':')[1];else if(k==='setup_map:upload'){openMapPicker();}else if(k.startsWith('setup_map:'))options.map=k.split(':')[1];else if(k==='setup_begin')startCampaign();return;}
+  if(mode==='upload_preview'){if(k==='upload_back'){uploadTicket++;uploadBusy=false;mode='setup';}else if(k==='upload_another')openMapPicker();else if(k==='upload_regenerate'&&uploadLand&&!uploadBusy)generateUpload();else if(k==='upload_accept'&&uploadPreview&&!uploadBusy){acceptedUpload=uploadPreview;options.map='upload';mode='setup';}return;}
   if(k==='notice_ok'){let back=backMode;if(back==='__story__')storyNext();else if(back==='__home_flash__')afterHomeFlash();else if(back==='__home_resume__'){pendingHomeAttack=null;resumeAi();}else if(back==='__home_defeat__'){pendingHomeAttack=null;sceneShow('home_castle_fallen.png','__new_campaign__','','','The End');}else{mode=back;}return;}
   if(k==='report_up'){reportScroll=Math.max(0,reportScroll-3);return;}if(k==='report_down'){reportScroll+=3;return;}
   if(k==='report_ok'){if(state.outcome)showEnding();else enterOrders(true);return;}
