@@ -1,0 +1,227 @@
+{
+  "seeds": [
+    1,
+    50
+  ],
+  "policies": [
+    "expert",
+    "defensive"
+  ],
+  "results": {
+    "old": {
+      "geometry": {
+        "aspect": 0.8742514970059878,
+        "ratio": 2.3653306730698445,
+        "coast": 1.51935035618806,
+        "borders": 8.135861044498025,
+        "degree": 4.206666666666669
+      },
+      "groups": {
+        "easy/expert": {
+          "n": 50,
+          "victory": 13,
+          "defeat": 37,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 12.66
+        },
+        "easy/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 48,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 30.78
+        },
+        "easy/all": {
+          "n": 100,
+          "victory": 13,
+          "defeat": 85,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 21.72
+        },
+        "medium/expert": {
+          "n": 50,
+          "victory": 5,
+          "defeat": 43,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 14.34
+        },
+        "medium/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 17.7
+        },
+        "medium/all": {
+          "n": 100,
+          "victory": 5,
+          "defeat": 93,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 16.02
+        },
+        "hard/expert": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 10
+        },
+        "hard/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 10.28
+        },
+        "hard/all": {
+          "n": 100,
+          "victory": 0,
+          "defeat": 100,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 10.14
+        },
+        "all/expert": {
+          "n": 150,
+          "victory": 18,
+          "defeat": 130,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 12.333333333333334
+        },
+        "all/defensive": {
+          "n": 150,
+          "victory": 0,
+          "defeat": 148,
+          "ongoing": 2,
+          "errors": 0,
+          "meanMonths": 19.586666666666666
+        },
+        "all/all": {
+          "n": 300,
+          "victory": 18,
+          "defeat": 278,
+          "ongoing": 4,
+          "errors": 0,
+          "meanMonths": 15.96
+        }
+      }
+    },
+    "new": {
+      "geometry": {
+        "aspect": 1.288316530568068,
+        "ratio": 3.091550466531927,
+        "coast": 1.670504730996141,
+        "borders": 8.20805806144121,
+        "degree": 4.1111111111111125
+      },
+      "groups": {
+        "easy/expert": {
+          "n": 50,
+          "victory": 20,
+          "defeat": 30,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 14.7
+        },
+        "easy/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 47,
+          "ongoing": 3,
+          "errors": 0,
+          "meanMonths": 32.34
+        },
+        "easy/all": {
+          "n": 100,
+          "victory": 20,
+          "defeat": 77,
+          "ongoing": 3,
+          "errors": 0,
+          "meanMonths": 23.52
+        },
+        "medium/expert": {
+          "n": 50,
+          "victory": 6,
+          "defeat": 43,
+          "ongoing": 1,
+          "errors": 0,
+          "meanMonths": 13.54
+        },
+        "medium/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 16.44
+        },
+        "medium/all": {
+          "n": 100,
+          "victory": 6,
+          "defeat": 93,
+          "ongoing": 1,
+          "errors": 0,
+          "meanMonths": 14.99
+        },
+        "hard/expert": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 8.4
+        },
+        "hard/defensive": {
+          "n": 50,
+          "victory": 0,
+          "defeat": 50,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 10.26
+        },
+        "hard/all": {
+          "n": 100,
+          "victory": 0,
+          "defeat": 100,
+          "ongoing": 0,
+          "errors": 0,
+          "meanMonths": 9.33
+        },
+        "all/expert": {
+          "n": 150,
+          "victory": 26,
+          "defeat": 123,
+          "ongoing": 1,
+          "errors": 0,
+          "meanMonths": 12.213333333333333
+        },
+        "all/defensive": {
+          "n": 150,
+          "victory": 0,
+          "defeat": 147,
+          "ongoing": 3,
+          "errors": 0,
+          "meanMonths": 19.68
+        },
+        "all/all": {
+          "n": 300,
+          "victory": 26,
+          "defeat": 270,
+          "ongoing": 4,
+          "errors": 0,
+          "meanMonths": 15.946666666666667
+        }
+      }
+    }
+  },
+  "englandDegree": 3.888888888888889
+}
