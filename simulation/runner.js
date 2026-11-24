@@ -19,13 +19,14 @@ export function checkState(g){
 }
 export function runCampaign({seed,difficulty,policy,mapType,neighbors,maxMonths=60,trace=false,Engine=CrownState}){
  const g=new Engine({seed,difficulty,neighbors}),rng=new Rng((seed^0x7f4a7c15)>>>0),human=g.human;
- const r={seed,difficulty,policy,mapType,character:human,home:g.lords[human].home_province,outcome:'ongoing',months:0,firstNormanSiege:null,aiSieges:0,normanSieges:0,aiAttacksHuman:0,normanInfighting:0,aiClaims:0,aiGoldSpent:0,aiTroopsLost:0,aiTurns:0,guardTurns:0,maxGuardStreak:0,maxNoProgressStreak:0,stalled:false,aiOpeningClaims:0,aiOpeningTurns:0,errors:0,error:null};
+ const r={seed,difficulty,policy,mapType,character:human,home:g.lords[human].home_province,outcome:'ongoing',months:0,firstNormanSiege:null,aiSieges:0,normanSieges:0,aiAttacksHuman:0,normanInfighting:0,aiClaims:0,aiGoldSpent:0,aiTroopsLost:0,aiSoldiersBought:0,aiKnightsBought:0,aiCatapultsBought:0,preparationTurns:0,aiTurns:0,guardTurns:0,maxGuardStreak:0,maxNoProgressStreak:0,stalled:false,aiOpeningClaims:0,aiOpeningTurns:0,errors:0,error:null};
  const guard={},idle={};let monthly=[],decisions=[];
  function observe(l,before,msg,castleBefore,ownerBefore){
   const events=g.ledger.slice(before),p=g.lords[l];let progress=false;
   for(const ev of events){
    if(ev.action==='claim'){r.aiClaims++;progress=true;if(r.months===1&&!ev.old_owner)r.aiOpeningClaims++;}
-   if(ev.action==='purchase_troops'||ev.action==='build_castle'){progress=true;r.aiGoldSpent+=ev.cost??20;}
+   if(ev.action==='purchase_troops'||ev.action==='build_castle'){progress=true;r.aiGoldSpent+=ev.cost??20;if(ev.action==='purchase_troops'){r.aiSoldiersBought+=ev.units.soldiers||0;r.aiKnightsBought+=ev.units.knights||0;r.aiCatapultsBought+=ev.units.catapults||0;}}
+   if(ev.action==='research_preparation')r.preparationTurns++;
    if(ev.action==='battle'||ev.action==='unopposed_capture'){
     const castle=ev.castle||castleBefore.has(ev.province),defender=ev.defender??ownerBefore[ev.province];
     if(castle){r.aiSieges++;if(p.faction==='Norman'){r.normanSieges++;if(r.firstNormanSiege===null)r.firstNormanSiege=r.months;}}
@@ -69,12 +70,12 @@ export function runPanel({start=1,end=250,maxMonths=60,mapTypes=MAP_TYPES,diffic
 }
 export function summarize(rows){
  const groups=new Map();
- const init=()=>({n:0,victory:0,defeat:0,ongoing:0,error:0,months:0,firstSiegeSum:0,firstSiegeN:0,aiSieges:0,normanSieges:0,aiAttacksHuman:0,normanInfighting:0,aiClaims:0,aiGoldSpent:0,aiTroopsLost:0,aiTurns:0,guardTurns:0,maxGuardStreakSum:0,maxNoProgressStreakSum:0,stalled:0,aiOpeningClaims:0,aiOpeningTurns:0,errors:0,firstError:null});
+ const init=()=>({n:0,victory:0,defeat:0,ongoing:0,error:0,months:0,firstSiegeSum:0,firstSiegeN:0,aiSieges:0,normanSieges:0,aiAttacksHuman:0,normanInfighting:0,aiClaims:0,aiGoldSpent:0,aiTroopsLost:0,aiSoldiersBought:0,aiKnightsBought:0,aiCatapultsBought:0,preparationTurns:0,aiTurns:0,guardTurns:0,maxGuardStreakSum:0,maxNoProgressStreakSum:0,stalled:0,aiOpeningClaims:0,aiOpeningTurns:0,errors:0,firstError:null});
  for(const r of rows){
   for(const key of ['all',r.difficulty,r.mapType,r.policy,r.difficulty+'/'+r.mapType+'/'+r.policy]){
    if(!groups.has(key))groups.set(key,init());const a=groups.get(key);a.n++;a[r.outcome]++;a.months+=r.months;
    if(r.firstNormanSiege!==null){a.firstSiegeN++;a.firstSiegeSum+=r.firstNormanSiege;}
-   for(const k of ['aiSieges','normanSieges','aiAttacksHuman','normanInfighting','aiClaims','aiGoldSpent','aiTroopsLost','aiTurns','guardTurns','aiOpeningClaims','aiOpeningTurns','errors'])a[k]+=r[k];
+   for(const k of ['aiSieges','normanSieges','aiAttacksHuman','normanInfighting','aiClaims','aiGoldSpent','aiTroopsLost','aiSoldiersBought','aiKnightsBought','aiCatapultsBought','preparationTurns','aiTurns','guardTurns','aiOpeningClaims','aiOpeningTurns','errors'])a[k]+=r[k];
    a.maxGuardStreakSum+=r.maxGuardStreak;a.maxNoProgressStreakSum+=r.maxNoProgressStreak;a.stalled+=+r.stalled;if(r.error&&!a.firstError)a.firstError=r.error;
   }
  }
