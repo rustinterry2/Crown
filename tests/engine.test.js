@@ -25,10 +25,14 @@ test('unoccupied enemy province changes ownership without battle',()=>{
   const result=s.move(h,target,'Stand and Fight',false);
   assert.equal(result.win,true);assert.equal(s.provinces[target].owner,h);
 });
-test('all Norman castles captured leads to victory',()=>{
+test('defeating all Norman lords leads to victory, regardless of castle owner',()=>{
   const s=new CrownState({seed:20,humanChoice:'Cedric of Rotherwood'}),h=s.human;
-  for(const id of s.norman_home_ids)s.provinces[id].owner=h;
-  assert.equal(s.checkEnd(),'victory');
+  const normans=Object.entries(s.lords).filter(([l,p])=>p.faction==='Norman');
+  const ally=Object.keys(s.lords).find(l=>l!==h&&s.lords[l].faction==='Saxon');
+  for(let i=0;i<normans.length;i++){
+    s.claimWar(normans[i][1].home_province,i===0?ally:h);
+    assert.equal(s.checkEnd(),i===normans.length-1?'victory':null);
+  }
 });
 
 test('maiden rescue requires four completed turns and a qualifying Saxon ally',()=>{
