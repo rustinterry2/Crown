@@ -29,6 +29,7 @@ function deploy(g,h,reserve){
 }
 function goals(g,h,c,rng){
  const p=g.lords[h],paths=safePaths(g,h,p.campaign_province),ranked=[];
+ if(p.campaign_army.soldiers+p.campaign_army.knights===0)return ranked;
  for(const [from,path] of paths)for(const id of g.neighbors[from]){
   const pr=g.provinces[id],owner=pr.owner,castle=pr.home_castle||pr.secondary_castle;
   if(owner===h||g.friendly(h,owner)||castle&&!p.campaign_army.catapults)continue;
