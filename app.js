@@ -52,6 +52,22 @@ function horse(x,y,rgb){
   c.restore();
 }
 const cachedCanvas=document.createElement('canvas');cachedCanvas.width=W;cachedCanvas.height=H;let cachedCtx=cachedCanvas.getContext('2d');
+function sherwoodCenter(){return mapInfo?.type==='random'?(mapInfo.forest||[474,330]):[474,330];}
+function drawSherwood(ctx){
+  const [fx,fy]=sherwoodCenter();
+  ctx.save();ctx.translate(Math.round(fx),Math.round(fy));
+  const px=(x,y,w,h,col)=>{ctx.fillStyle=col;ctx.fillRect(x,y,w,h);};
+  px(-45,3,89,9,'#123922');px(-39,12,77,5,'#0c2419');
+  for(const [dx,dy] of [[-31,0],[-11,-8],[13,-5],[31,1]]){
+    px(dx-3,dy+2,7,21,'#30261a');
+    px(dx-17,dy-4,36,14,'#102b1c');
+    px(dx-13,dy-13,27,15,'#145032');
+    px(dx-7,dy-20,15,14,'#236b41');
+    px(dx-13,dy-6,9,6,'#1a623d');
+    px(dx+5,dy-11,7,5,'#2b7547');
+  }
+  ctx.restore();
+}
 function coloredBoard(){let owners=IDS.map(id=>state.provinces[id].owner),castleIds=IDS.filter(id=>state.provinces[id].secondary_castle),key=JSON.stringify([owners,castleIds,mapInfo?.seed??null]);if(key===coloredMapKey&&coloredMap)return coloredMap;
   let canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;let x=canvas.getContext('2d');
   if(mapInfo?.type==='random'){
@@ -65,6 +81,7 @@ function coloredBoard(){let owners=IDS.map(id=>state.provinces[id].owner),castle
     let data=new Uint8ClampedArray(baseData.data);for(let i=0;i<data.length;i+=4){let id=hitData.data[i];if(id===11)id=14;if(!T[id])continue;let owner=state.provinces[id].owner,cl=state.colors[owner]||[157,119,66],alpha=paintData.data[i]/255;if(alpha<=.001)continue;for(let z=0;z<3;z++)data[i+z]=Math.round(data[i+z]*(1-alpha)+cl[z]*alpha);}x.putImageData(new ImageData(data,W,H),0,0);
     for(let id of castleIds){if(CASTLES.includes(id))continue;let [cx,cy]=CASTLE_POS[id];x.fillStyle='#c69c65';x.strokeStyle='#2a140e';x.fillRect(cx-13,cy-3,26,19);x.strokeRect(cx-13,cy-3,26,19);for(let dx of [-10,0,10])x.fillRect(cx+dx-4,cy-10,8,13);}
   }
+  drawSherwood(x);
   coloredMapKey=key;coloredMap=canvas;return canvas;
 }
 function territoryOutline(id){
@@ -91,8 +108,29 @@ function territoryOutline(id){
   }
   outlineCache.set(key,sheet);return sheet;
 }
+function horseOffsets(n){
+  if(n<=1)return [[0,0]];
+  if(n===2)return [[-19,-10],[19,10]];
+  if(n===3)return [[-19,-13],[19,-13],[0,16]];
+  return Array.from({length:n},(_,i)=>[(i%3-1)*22,(Math.floor(i/3)-.5)*24]);
+}
 function renderMap(){if(!state){c.drawImage(img['board.png'],0,0);return;}if(visualOwners){let saved=state.provinces;let hold={};for(let id of IDS){hold[id]=saved[id].owner;if(id in visualOwners)saved[id].owner=visualOwners[id];}coloredMapKey='';c.drawImage(coloredBoard(),0,0);for(let id of IDS)saved[id].owner=hold[id];coloredMapKey='';}else c.drawImage(coloredBoard(),0,0);
-  for(let [l,p] of Object.entries(state.lords)){if(!(visualAlive?.[l]??p.alive))continue;let id=visualHorsePos?.[l]??p.campaign_province,pt=mapInfo?.type==='random'?mapInfo.horses[id]:HORSES[id];if(!pt)continue;horse(...pt,state.colors[l]||[120,155,220]);}
+  const byTerritory=new Map();
+  for(const [l,p] of Object.entries(state.lords)){
+    if(!(visualAlive?.[l]??p.alive))continue;
+    const id=visualHorsePos?.[l]??p.campaign_province;
+    const pt=mapInfo?.type==='random'?mapInfo.horses[id]:HORSES[id];
+    if(!pt)continue;
+    if(!byTerritory.has(id))byTerritory.set(id,[]);
+    byTerritory.get(id).push({l,pt});
+  }
+  for(const group of byTerritory.values()){
+    const spreads=horseOffsets(group.length);
+    group.forEach(({l,pt},i)=>{
+      const [dx,dy]=spreads[i];
+      horse(pt[0]+dx,pt[1]+dy,state.colors[l]||[120,155,220]);
+    });
+  }
   if(selected>0&&['read','move','castle_pick','battle','passage'].includes(mode))c.drawImage(territoryOutline(selected),0,0);
   if(flashVisible&&flashId){let mask=mapInfo?.type==='random'?null:hitData;if(mask){c.fillStyle='rgba(255,205,104,.30)';for(let y=140;y<950;y+=4)for(let x=40;x<820;x+=4){if(mask.data[(y*W+x)*4]===flashId)c.fillRect(x,y,4,4);}}else c.drawImage(territoryOutline(flashId),0,0);}
 }
@@ -140,7 +178,29 @@ function drawNotice(){
   }
   button('notice_ok','Continue',[165,1626,687,1698]);
 }
-function drawInvitation(maiden){header(maiden?'A Saxon Lady in Peril':'A Tournament',status());if(maiden)lines([`Word comes from the house of ${SHORT[pendingMaiden]}.`,'Lady Catherine has been seized by the','Normans and carried into a dark keep.','Wilt thou ride to her aid?'],1220,70);else lines(['A tournament has been called.','All the lords gather to joust.','Fame awaits the bold of heart.','Wilt thou ride in the lists?'],1220,70);button(maiden?'maiden_yes':'tournament_yes',maiden?'Ride to her aid':'Enter Tournament',[112,1538,740,1618]);button(maiden?'maiden_no':'tournament_no',maiden?'Refuse the plea':'Decline Invitation',[112,1630,740,1710]);}
+function drawInvitation(maiden){
+  header(maiden?'A Saxon Lady in Peril':'A Tournament',status());
+  if(maiden){
+    drawPortrait(pendingMaiden,[540,1207,740,1436]);
+    const paragraphs=[
+      'Word comes from the house of '+SHORT[pendingMaiden]+'.',
+      'Lady Catherine is held by the Normans.',
+      'Wilt thou ride to her aid?'
+    ];
+    let y=1194;
+    for(const phrase of paragraphs){
+      for(const sentence of wrap(phrase,'small',380)){
+        text(sentence,291,y,'small',LIGHT,'center');
+        y+=52;
+      }
+      y+=6;
+    }
+  }else{
+    lines(['A tournament has been called.','All the lords gather to joust.','Fame awaits the bold of heart.','Wilt thou ride in the lists?'],1220,70);
+  }
+  button(maiden?'maiden_yes':'tournament_yes',maiden?'Ride to her aid':'Enter Tournament',[112,1538,740,1618]);
+  button(maiden?'maiden_no':'tournament_no',maiden?'Refuse the plea':'Decline Invitation',[112,1630,740,1710]);
+}
 function drawAi(){header('The Lords Take Their Turns',status());lines([aiMessage||'The other lords prepare their orders.'],1260,70,'small');}
 function drawGuide(){if(guide==='off'||!['orders','conquest','transfer','move'].includes(mode))return;let target={conquest:'conquest',transfer:'transfer',plus:'plus:soldiers',move:'move'}[guide],btn=buttons.find(b=>b.key===target);let x,y;if(guide==='province'){let pt=mapInfo?.type==='random'?mapInfo.horses[guideTarget]:HORSES[guideTarget];if(!pt)return;[x,y]=pt;y-=37;}else if(btn){x=(btn.rect[0]+btn.rect[2])/2;y=btn.rect[1]-23;}else return;c.fillStyle='#ffd34f';c.strokeStyle='#5e3513';c.lineWidth=4;let dy=Math.sin(guideTicks/3)*8;c.beginPath();c.moveTo(x-18,y-35+dy);c.lineTo(x+18,y-35+dy);c.lineTo(x+18,y-10+dy);c.lineTo(x+29,y-10+dy);c.lineTo(x,y+17+dy);c.lineTo(x-29,y-10+dy);c.lineTo(x-18,y-10+dy);c.closePath();c.fill();c.stroke();}
 function render(){if(!fontMetrics)return;buttons.length=0;c.clearRect(0,0,W,H);if(mode==='splash'){fullScreen('title_splash.png');return;}if(mode==='scene'){fullScreen(scene,sceneOverlay);return;}if(mode==='setup'){renderSetup();return;}renderMap();switch(mode){case 'orders':drawOrders();break;case 'read':drawRead();break;case 'conquest':drawConquest();break;case 'army':drawArmy();break;case 'castle_pick':drawCastlePick();break;case 'transfer':drawTransfer();break;case 'move':drawMove();break;case 'battle':drawBattle();break;case 'passage':drawPassage();break;case 'report':drawReport();break;case 'history':drawHistory();break;case 'accounts':drawAccounts();break;case 'notice':drawNotice();break;case 'tournament_offer':drawInvitation(false);break;case 'maiden_offer':drawInvitation(true);break;case 'ai_phase':drawAi();break;}drawGuide();}
