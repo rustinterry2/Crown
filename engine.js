@@ -32,9 +32,18 @@ export class Rng{
   sample(a,n){return this.shuffle([...a]).slice(0,n);}
   uniform(a,b){return a+(b-a)*this.random();}
 }
-// M3: tested adaptive recruitment and composition optimizer.
+// Tested M3-derived strategies; each computer lord retains one profile per campaign.
 const TACTICS=['Stand and Fight','Outflank','Ferocious Attack','Bombard'];
 const M3_CONFIG=Object.freeze({adaptive:true,mix:true});
+export const AI_PROFILES=Object.freeze(Object.fromEntries(Object.entries({
+ M9:{attack:true,budget:true},
+ M5:{attack:true},
+ M6:{budget:true},
+ M11:{moderate:true,target:true},
+ M10:{target:true},
+ M4:{attack:true,budget:true,knights:true,zero:true}
+}).map(([id,c])=>[id,Object.freeze({...M3_CONFIG,...c})])));
+const AI_PROFILE_IDS=Object.freeze(Object.keys(AI_PROFILES));
 const cost=a=>U.reduce((n,u)=>n+a[u]*PRICES[u],0);
 const add=(a,b)=>Object.fromEntries(U.map(u=>[u,a[u]+b[u]]));
 const zero=()=>({soldiers:0,knights:0,catapults:0});
@@ -64,8 +73,8 @@ function reachableTargets(g,l){
 }
 function reinforcement(g,l,config,danger){
  const p=g.lords[l],a=p.campaign_army;
- if(p.campaign_province!==p.home_province||danger>=.45||p.home_army.soldiers<7)return null;
- const budget=Math.min(25,Math.max(0,p.treasury-3));if(budget<5)return null;
+ if(p.campaign_province!==p.home_province||danger>=.45||p.home_army.soldiers<(config.zero?0:7))return null;
+ const budget=config.budget?Math.min(65,Math.max(0,p.treasury)):Math.min(25,Math.max(0,p.treasury-3));if(budget<5)return null;
  const candidates=reachableTargets(g,l);
  // A goal is reachable through owned/allied/unfortified neutral land; hostile
  // blocking provinces appear as intermediate objectives rather than being skipped.
@@ -90,6 +99,7 @@ function reinforcement(g,l,config,danger){
    for(let soldiers=0;soldiers<=budget-15*catapults-8*knights;soldiers++){
     if(field+soldiers+5*knights>cap&&(soldiers||knights))continue;
     const units={soldiers,knights,catapults},spent=cost(units);
+    if(config.knights&&knights<Math.floor((spent-15*catapults)*.85/8))continue;
     if(spent<5)continue;
     const after=projectedOdds(g,l,id,add(a,units));
     if(after<=before+1e-10)continue;
@@ -125,7 +135,14 @@ export class CrownState{
     this.colors={[this.human]:[132,172,255]};
     sax.slice(1).forEach((pid,i)=>this.colors[assignments[pid]]=[[84,91,191],[33,39,140]][i]);NORMAN.forEach(pid=>this.colors[assignments[pid]]=COLORS[pid]);
     this.convertedLords.forEach((l,i)=>this.colors[l]=[[190,80,83],[179,67,111]][i]);
-    this.event('game_started',this.human,this.lords[this.human].home_province);
+    // Independent seeded stream: assignments do not change map, combat or event RNG.
+    const profileRng=new Rng((this.seed^0xa19f43d7)>>>0);
+    this.ai_profiles={};
+    for(const l of Object.keys(this.lords))if(l!==this.human){
+      const profile=profileRng.choice(AI_PROFILE_IDS);
+      this.ai_profiles[l]=profile;
+    }
+    this.event('game_started',this.human,this.lords[this.human].home_province,{ai_profiles:{...this.ai_profiles}});
   }
   event(action,lord=null,province=null,details={}){this.ledger.push({id:this.ledger.length+1,turn:this.turn,year:this.year,month:this.month,action,lord,province,...details});}
   income(l){return IDS.filter(id=>this.provinces[id].owner===l).reduce((n,id)=>n+T[id][1],0);}
@@ -193,13 +210,14 @@ export class CrownState{
     else{lost=this.attackerCasualties(l,clamp(.12+.28*Math.pow(df/Math.max(1,atk),.75),.08,.78));enemyLost=this.defenderCasualties(id,clamp(.16*Math.pow(atk/Math.max(1,df),.65),.08,.75));this.retreat(l);text=`Attack on ${T[id][0]} repelled.`+(lost?` Lost ${lost}.`:'')+(enemyLost?` Enemy lost ${enemyLost}.`:'');}
     this.event('battle',l,id,{defender:victim,castle,tactic:t,robin,won:win,losses:lost,defenders_lost:enemyLost});this.checkEnd();return{ends_turn:true,text,win};
   }
+  aiProfile(l){return AI_PROFILES[this.ai_profiles?.[l]]||M3_CONFIG;}
   aiTactic(l,id){if(!this.provinces[id].owner)return ['Stand and Fight',1];return ['Stand and Fight','Outflank','Ferocious Attack','Bombard'].map(t=>[t,this.expectedOdds(l,id,t)]).sort((a,b)=>b[1]-a[1])[0];}
   aiHomeDanger(l){let home=this.lords[l].home_province,worst=0;for(let [enemy,p] of Object.entries(this.lords)){if(enemy===l||!p.alive||this.friendly(l,enemy)||!this.neighbors[home].includes(p.campaign_province)||!p.campaign_army.catapults||!p.campaign_army.soldiers&&!p.campaign_army.knights)continue;worst=Math.max(worst,...['Outflank','Bombard','Ferocious Attack'].map(t=>this.expectedOdds(enemy,home,t)));}return worst;}
   aiGoal(l,id){let owner=this.provinces[id].owner;if(owner===l||this.friendly(l,owner))return 0;let score=7+3.3*T[id][1]+.6*this.remainingVassals(id);if(owner){score+=3.5;if(this.provinces[id].home_castle){score+=17+4.5*this.territoryCount(owner);if(this.lords[l].faction==='Saxon'&&this.norman_home_ids.includes(id))score+=16;if(owner===this.human)score+=8;}else if(this.provinces[id].secondary_castle)score+=5;}
     if(this.lords[l].faction==='Norman'){if(owner&&this.lords[owner].faction==='Saxon')score=1.45*score+18;else if(!owner)score*=.92;else score*=.62;if(owner&&this.lords[owner].faction==='Saxon'&&this.provinces[id].home_castle)score*=1.3;}
-    return score+1.6*this.neighbors[id].filter(n=>!this.provinces[n].owner).length;
+    return score+1.6*this.neighbors[id].filter(n=>!this.provinces[n].owner).length+(this.aiProfile(l).target&&owner===this.human&&this.provinces[id].home_castle?32:0);
   }
-  aiFloor(l,id){let castle=this.provinces[id].home_castle||this.provinces[id].secondary_castle,base=this.provinces[id].home_castle?.65:.72;return this.lords[l].faction==='Norman'&&castle?.60:castle?base:.72;}
+  aiFloor(l,id){let castle=this.provinces[id].home_castle||this.provinces[id].secondary_castle,base=this.provinces[id].home_castle?.65:.72;const floor=this.lords[l].faction==='Norman'&&castle?.60:castle?base:.72,c=this.aiProfile(l);return c.attack?(castle?.58:.34):c.moderate?Math.max(.50,floor-.10):floor;}
   aiAccessible(l,steps=3){let visited=new Set([this.lords[l].home_province]),front=[...visited];for(let k=0;k<steps;k++){let next=[];for(let id of front)for(let n of this.neighbors[id]){let owner=this.provinces[n].owner;let c=this.provinces[n].home_castle||this.provinces[n].secondary_castle;if(owner&&owner!==l&&this.lords[owner].faction==='Saxon'&&!this.friendly(l,owner)&&c)return true;if(!owner||owner===l||this.friendly(l,owner))if(!visited.has(n)){visited.add(n);next.push(n);}}front=next;}return false;}
   aiPaths(l){let from=this.lords[l].campaign_province,dist={[from]:0},paths={[from]:[]},queue=[[0,from]];
     while(queue.length){queue.sort((a,b)=>a[0]-b[0]);let [d,id]=queue.shift();if(d>dist[id]+1e-8)continue;for(let n of this.neighbors[id]){let owner=this.provinces[n].owner,castle=this.provinces[n].home_castle||this.provinces[n].secondary_castle,cost=0;
@@ -235,29 +253,29 @@ export class CrownState{
     return candidates[0]??null;
   }
   aiFortress(l){let p=this.lords[l];if(p.treasury<44)return null;let candidates=[];for(let id of IDS){let pr=this.provinces[id];if(pr.owner!==l||pr.home_castle||pr.secondary_castle)continue;let en=this.neighbors[id].filter(n=>this.provinces[n].owner&&!this.friendly(l,this.provinces[n].owner)&&this.provinces[n].owner!==l);if(!en.length)continue;let armies=Object.keys(this.lords).filter(e=>e!==l&&this.lords[e].alive&&!this.friendly(l,e)&&this.neighbors[id].includes(this.lords[e].campaign_province)).length;let exp=2*en.length+3*armies+T[id][1]*.35;if(exp>=5)candidates.push([exp,id]);}candidates.sort((a,b)=>b[0]-a[0]||b[1]-a[1]);return candidates[0]?.[1]??null;}
-  aiOne(l){let p=this.lords[l];if(!p.alive)return '';let home=p.home_province,location=p.campaign_province,funds=p.treasury,danger=this.aiHomeDanger(l);let name=SHORT[l];
-    if(danger>=.50&&location!==home&&COUNT(p.campaign_army)>0){this.move(l,home);delete this.ai_goals[l];return `${name}: Returned home to defend the castle.`;}
-    if(location===home){let reserve=danger>=.45?11:7,units={soldiers:Math.max(0,p.home_army.soldiers-reserve),knights:p.home_army.knights,catapults:p.home_army.catapults};if(COUNT(units))this.transfer(l,units);}
+  aiOne(l){let p=this.lords[l];if(!p.alive)return '';let home=p.home_province,location=p.campaign_province,funds=p.treasury,danger=this.aiHomeDanger(l);let name=SHORT[l],config=this.aiProfile(l),model=this.ai_profiles?.[l]||'M3';
+    if(!config.zero&&danger>=.50&&location!==home&&COUNT(p.campaign_army)>0){this.move(l,home);delete this.ai_goals[l];return `${name}: Returned home to defend the castle.`;}
+    if(location===home){let reserve=config.zero?0:danger>=.45?11:7,units={soldiers:Math.max(0,p.home_army.soldiers-reserve),knights:p.home_army.knights,catapults:p.home_army.catapults};if(COUNT(units))this.transfer(l,units);}
     let plan=this.aiPlan(l);
     if(location===home&&funds>=15&&this.aiNeedSiege(l)&&(p.faction==='Norman'&&this.aiAccessible(l,3)||!plan)&&p.campaign_army.soldiers+5*p.campaign_army.knights>=12){this.purchase(l,{catapults:1});return `${name}: Recruited a catapult for a planned siege.`;}
     // Isolated research intervention: only blocked conquest, only at home.
     // The existing first-catapult purchase, defense, opening expansion and
     // all currently viable conquest plans take precedence.
     if(location===home&&!plan){
-      const prep=reinforcement(this,l,M3_CONFIG,danger);
+      const prep=reinforcement(this,l,config,danger);
       if(prep){
         this.ai_goals[l]=prep.target;
         if(prep.save){
-          this.event('research_preparation',l,prep.target,{model:'M3',reason:'save for first siege engine',before:prep.before,desired:prep.desired});
+          this.event('research_preparation',l,prep.target,{model,reason:'save for first siege engine',before:prep.before,desired:prep.desired});
           return `${SHORT[l]}: Saved gold for a planned siege.`;
         }
         this.purchase(l,prep.units);
-        this.event('research_preparation',l,prep.target,{model:'M3',before:prep.before,after:prep.after,desired:prep.desired,units:prep.units,cost:prep.cost});
+        this.event('research_preparation',l,prep.target,{model,before:prep.before,after:prep.after,desired:prep.desired,units:prep.units,cost:prep.cost});
         return `${SHORT[l]}: Recruited for ${T[prep.target][0]}.`;
       }
     }
     if(location===home&&funds>=8){
-      const need=this.aiRecruit(l,plan,danger),n=Math.min(need,Math.max(0,funds-(danger>=.6?0:3)));
+      const need=this.aiRecruit(l,plan,danger),n=config.budget?Math.min(65,Math.max(0,funds),Math.max(need,0)*3):Math.min(need,Math.max(0,funds-(danger>=.6?0:3)));
       if(need>=5&&n>=5){
         const expansion=this.aiExpansion(l,plan,danger,n);
         if(expansion){
@@ -265,14 +283,15 @@ export class CrownState{
           delete this.ai_goals[l];
           return `${name}: ${result.text}`;
         }
-        this.purchase(l,{soldiers:n});return `${name}: Recruited ${n} soldiers for the campaign.`;
+        const knights=config.knights?Math.floor(n*.85/8):0,soldiers=n-8*knights;
+        this.purchase(l,{soldiers,knights});return knights?`${name}: Recruited ${soldiers} soldiers and ${knights} knights for the campaign.`:`${name}: Recruited ${soldiers} soldiers for the campaign.`;
       }
     }
     if(location===home&&p.treasury>=15&&this.aiNeedSiege(l)){this.purchase(l,{catapults:1});return `${name}: Recruited a catapult for a planned siege.`;}
     let castle=this.aiFortress(l);if(castle!==null&&(danger>=.45||!plan||plan.score<16)){this.purchaseCastle(l,castle);return `${name}: Fortified ${T[castle][0]}.`;}
     if(plan){let dest=plan.path[0],owner=this.provinces[dest].owner;if(owner===l||this.friendly(l,owner)){let r=this.move(l,dest);this.ai_goals[l]=plan.goal;return `${name}: ${r.text.replace(/\.$/,'')} toward ${T[plan.goal][0]}.`;}let [t,od]=this.aiTactic(l,dest);if(!owner||od>=this.aiFloor(l,dest)){let r=this.move(l,dest,t,false);if(r.win&&dest!==plan.goal)this.ai_goals[l]=plan.goal;else delete this.ai_goals[l];return `${name}: ${r.text}`;}delete this.ai_goals[l];}
     if(location!==home&&(funds>=8||COUNT(p.home_army)>7)){this.retreat(l);delete this.ai_goals[l];return `${name}: Withdrew to regroup at the home castle.`;}
-    if(location===home&&p.treasury>=8&&p.home_army.soldiers<7){let n=Math.min(12,p.treasury);this.purchase(l,{soldiers:n});return `${name}: Reinforced the home garrison with ${n} soldiers.`;}
+    if(location===home&&p.treasury>=8&&p.home_army.soldiers<(config.zero?0:7)){let n=Math.min(12,p.treasury);this.purchase(l,{soldiers:n});return `${name}: Reinforced the home garrison with ${n} soldiers.`;}
     return `${name}: Guarded ${T[p.campaign_province][0]}.`;
   }
   randomEvent(){if(this.rng.random()>=.10)return '';let living=Object.keys(this.lords).filter(l=>this.lords[l].alive),l=this.rng.choice(living),p=this.lords[l],kinds=this.rng.shuffle(['robbery','revolt','sabotage']);for(let kind of kinds){if(kind==='robbery'&&p.treasury>=2){let n=Math.max(1,Math.floor(p.treasury/2));p.treasury-=n;this.event('tax_robbery',l);return `${SHORT[l]}: Robbers stole ${n} gold.`;}if(kind==='revolt'){let can=IDS.filter(id=>this.provinces[id].owner===l&&!this.provinces[id].home_castle);if(can.length){let id=this.rng.choice(can),pr=this.provinces[id];pr.owner=null;pr.secondary_castle=false;pr.castle_garrison=0;pr.castle_equipment={knights:0,catapults:0};if(p.campaign_province===id)p.campaign_province=p.home_province;this.event('province_revolt',l,id);return `${SHORT[l]}: ${T[id][0]} revolted.`;}}if(kind==='sabotage'){let avail=['home','campaign'].filter(k=>p[k+'_army'].catapults>0);if(avail.length){let k=this.rng.choice(avail);this.casualties(l,k,{soldiers:0,knights:0,catapults:1});this.event('sabotage',l);return `${SHORT[l]}: A catapult was sabotaged.`;}}}return '';}
