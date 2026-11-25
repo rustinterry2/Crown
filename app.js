@@ -1,5 +1,5 @@
 import {randomMap,uploadedMap} from './random-map.js';
-import {CrownState,Rng,T,IDS,SAXON,SAXONS,NORMANS,SHORT,TIERS,LEAD,START_RANK,COLORS,HORSES,CASTLE_POS,PRICES,U,SUMMARY,COUNT,MONTH,ENGLAND,CASTLES} from './engine.js';
+import {CrownState,Rng,T,IDS,SAXON,SAXONS,NORMANS,SHORT,TIERS,LEAD,START_RANK,COLORS,HORSES,CASTLE_POS,PRICES,U,SUMMARY,COUNT,MONTH,ENGLAND,CASTLES} from './engine.js?v=1b1f6f28';
 const W=852,H=1846,A='assets/';const gameCanvas=document.getElementById('game'),c=gameCanvas.getContext('2d',{alpha:false});
 const color=(a)=>`rgb(${a.join(',')})`;const INK='#432018',LIGHT='#663021',BEIGE='#d3ab73';
 const img={}, buttons=[];let fontMetrics,atlas,hit,paint,baseData,hitData,paintData,assetMap={};
@@ -10,7 +10,7 @@ let message='',backMode='orders',scene='',sceneReturn='orders',sceneNotice='',sc
 let queue=[],queueIndex=0,aiMessage='',aiRunning=false,pendingHomeAttack=null,pendingHumanFlash=0,lastSceneBefore='';let coloredMap=null,coloredMapKey='',tapActive=false;
 let noticePortrait=null,englandSelectionMask=null,horseHitTargets=[];
 const outlineCache=new Map();
-let visualCastles=null,pressedKey=null,pressedPointer=null,pressedAt=0,reportStart=0,reportMonth='',historyScroll=0,reportEntries=[];
+let visualCastles=null,pressedKey=null,pressedPointer=null,pressedAt=0,reportTurn=0,reportMonth='',historyScroll=0,reportEntries=[];
 const homeCastleSprites={};
 let uploadLand=null,uploadPreview=null,acceptedUpload=null,uploadError='',uploadBusy=false,uploadTicket=0;
 function loadImage(file){return new Promise((resolve,reject)=>{let im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Failed loading '+file));im.src=A+(assetMap[file]||file);});}
@@ -520,7 +520,8 @@ function drawBattle(){
   }else lines(['Your army: '+ours,'Defenders: '+theirs],1183,64,'small');
   const shift=ally?53:0;
   [['Stand and Fight',88,1347],['Ferocious Attack',438,1347],['Outflank',88,1438],['Bombard',438,1438]].forEach(([t,x,y])=>button('tactic:'+t,t,[x,y+shift,x+326,y+78+shift],'small',t===tactic));
-  text('Estimated win chance: '+Math.round(state.expectedOdds(state.human,id,tactic)*100)+' percent',426,1533+shift,'small',LIGHT,'center');
+  const chance=Math.round(state.expectedOdds(state.human,id,tactic)*100);
+  text(state.robin_pending?'Win chance: '+chance+' percent - Robin pledged':'Estimated win chance: '+chance+' percent',426,1533+shift,'small',LIGHT,'center');
   button('fight','Attack',[165,1598+shift,687,1670+shift]);
   button('back','Cancel',[165,1678+shift,687,1750+shift]);
 }
@@ -556,7 +557,7 @@ function ledgerEntry(r,chronicle=false){
     case 'build_castle':text='Built a castle at '+p+'.';break;
     case 'monthly_tax':if(chronicle&&r.lord!==state.human)return null;text='Received '+r.received+' gold in taxes (treasury '+r.balance+').';break;
     case 'alliance_broken':text='Broke alliance with '+SHORT[r.enemy]+'.';break;
-    case 'maiden_union':text='United with '+SHORT[r.ally]+'; gained '+r.territories+' territories.';break;
+    case 'maiden_union':text='United with '+SHORT[r.ally]+'; gained '+r.territories+' territories'+(r.garrison_added?' and '+r.garrison_added+' soldiers at '+p:'')+'.';break;
     case 'robin_pledged':text='Won Robin Hood\'s pledge.';break;
     case 'robin_aid':text='Received Robin Hood\'s aid in battle.';break;
     case 'leadership_rank_changed':text='Leadership rank changed.';break;
@@ -694,13 +695,13 @@ function showEnding(){
 function storyBegin(steps,ending='orders'){story=steps;storyEnd=ending;storyNext();}
 function storyNext(){if(!story.length){if(storyEnd==='orders'){enterOrders(false);return;}mode=storyEnd;render();return;}let [kind,payload]=story.shift();if(kind==='text')alertText(payload,'__story__');else if(kind==='scene')sceneShow(payload,'__story__');else if(kind==='action'){if(payload==='union'){state.maidenUnion(pendingMaiden);pendingMaiden=null;}storyNext();}}
 function enterOrders(begin=false){if(state.checkEnd()){showEnding();return;}mode='orders';selected=0;if(begin){const ally=state.maidenCandidate();if(ally){pendingMaiden=ally;mode='maiden_offer';state.tournament_pending=false;}else if(state.tournament_pending&&!state.tournament_held){mode='tournament_offer';}}render();}
-function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='upload'?acceptedUpload:options.map==='random'?randomMap(seed):null;if(options.map==='upload'&&!mapInfo)throw Error('Choose an uploaded kingdom first.');outlineCache.clear();state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';clearVisualState();reportStart=0;reportEntries=[];historyScroll=0;reportMonth='';guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
+function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='upload'?acceptedUpload:options.map==='random'?randomMap(seed):null;if(options.map==='upload'&&!mapInfo)throw Error('Choose an uploaded kingdom first.');outlineCache.clear();state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';clearVisualState();reportTurn=0;reportEntries=[];historyScroll=0;reportMonth='';guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
 function costOf(){return U.reduce((n,u)=>n+quantity[u]*PRICES[u],0)+(wantCastle?20:0);}
 function clearQty(){quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;}
 function finishTurn(msg,defer=false){
   state.checkEnd();
   summary=[SHORT[state.human]+': '+msg];
-  reportMonth=MONTH[state.month-1]+' '+state.year;
+  reportTurn=state.turn;reportMonth=MONTH[state.month-1]+' '+state.year;
   queue=Object.keys(state.lords).filter(l=>l!==state.human&&state.lords[l].alive);
   state.rng.shuffle(queue);queueIndex=0;
   aiMessage='The other lords prepare their orders.';mode='ai_phase';render();
@@ -713,8 +714,12 @@ function showFlash(id,onDone){
     flashVisible=!flashVisible;render();
   },160);
 }
+function monthReportRecords(ledger,turn){
+  const current=ledger.filter(r=>r.turn===turn);
+  return [...current.filter(r=>r.action==='monthly_tax'),...current.filter(r=>r.action!=='monthly_tax')];
+}
 function finishReport(){
-  reportEntries=ledgerEntries(state.ledger.slice(reportStart));
+  reportEntries=ledgerEntries(monthReportRecords(state.ledger,reportTurn));
   mode='report';reportScroll=0;aiRunning=false;render();
 }
 function nextAiStep(){
@@ -781,6 +786,16 @@ function guideTap(key){
       .sort((a,b)=>T[b][2]-T[a][2])[0]||0;
   }
 }
+function visitRobin(returnTo){
+  if(state.robin_pending){
+    sceneShow('robin_sherwood.png',returnTo,'Robin pledges aid already: My men stand ready, my lord. We shall aid thee in thy next battle.',returnTo);
+    return;
+  }
+  try{
+    state.useRobin();
+    sceneShow('robin_sherwood.png',returnTo,'Robin pledges aid: My archers shall join thee, my lord, and weaken thy foes in thy next battle.',returnTo);
+  }catch(e){alertText(e.message,returnTo,'Robin Hood');}
+}
 function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(mode==='scene'){let back=sceneReturn;if(sceneNotice){let n=sceneNotice,b=sceneNoticeBack;sceneNotice='';alertText(n,b,/Robin pledges/.test(n)?'Robin Hood':null);return;}if(back==='__story__')storyNext();else if(back==='__new_campaign__'){mode='setup';render();}else if(back==='__home_attack_intro__')afterHomeIntro();else if(back==='__resume_ai__')resumeAi();else{mode=back;render();}return;}if(mode==='ai_phase')return;
   let key=buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key;
   if(key){try{action(key);}catch(e){console.error(e);if(mode==='setup'||mode==='upload_preview'){uploadError=e.message;uploadBusy=false;mode='upload_preview';}else alertText(e.message);}render();if(!['ai_phase'].includes(mode))return;}
@@ -789,12 +804,8 @@ function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(m
   if(!artworkTarget&&isSherwood(x,y)){
     const returnTo=mode;
     if(mode==='read')selected=-1;
-    if(mode==='move'){
-      try{
-        state.useRobin();
-        sceneShow('robin_sherwood.png',returnTo,'Robin pledges aid to thy next enemy battle.',returnTo);
-      }catch(e){alertText(e.message,returnTo);}
-    }else sceneShow('robin_sherwood.png',returnTo);
+    if(['move','battle','conquest'].includes(mode))visitRobin(returnTo);
+    else sceneShow('robin_sherwood.png',returnTo);
     return;
   }
   let id=artworkTarget||provinceAt(x,y);if(!id)return;
@@ -815,10 +826,10 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(mode==='upload_preview'){if(k==='upload_back'){uploadTicket++;uploadBusy=false;mode='setup';}else if(k==='upload_another')openMapPicker();else if(k==='upload_regenerate'&&uploadLand&&!uploadBusy)generateUpload();else if(k==='upload_accept'&&uploadPreview&&!uploadBusy){acceptedUpload=uploadPreview;options.map='upload';mode='setup';}return;}
   if(k==='notice_ok'){let back=backMode;if(back==='__story__')storyNext();else if(back==='__home_flash__')afterHomeFlash();else if(back==='__home_resume__'){pendingHomeAttack=null;resumeAi();}else if(back==='__home_defeat__'){pendingHomeAttack=null;finishReport();}else{mode=back;}return;}
   if(k==='history_newer'){historyScroll=Math.max(0,historyScroll-1);return;}if(k==='history_older'){historyScroll++;return;}
-  if(k==='report_ok'){reportStart=state.ledger.length;if(state.outcome)showEnding();else enterOrders(true);return;}
+  if(k==='report_ok'){if(state.outcome)showEnding();else enterOrders(true);return;}
   if(k==='tournament_yes'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,.04);let r=state.changeRank(state.human,1);storyBegin([['scene','tournament_trumpets.png'],['text','Heralds sound their trumpets, and the lords gather before the lists.'],['scene','tournament_joust.png'],['text',`Before the assembled court, thou hast ridden with courage and won new renown. Thy leadership is now ${r}.`]]);return;}
   if(k==='tournament_no'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);alertText(`Thou hast declined the tournament. Thy leadership is now ${r}.`,'orders');return;}
-  if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thy leadership is now ${r}.`]]);return;}
+  if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thirty soldiers await thee at ${T[state.lords[ally].home_province][0]} castle. Thy leadership is now ${r}.`]]);return;}
   if(k==='maiden_no'){state.maiden_rescue_done=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);pendingMaiden=null;alertText(`Thou hast refused the plea. Thy leadership is now ${r}.`,'orders');return;}
   if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
   if(k==='read'){mode='read';selected=0;return;}if(k==='conquest'){guideTap(k);mode='conquest';return;}if(k==='army'){clearQty();mode='army';return;}if(k==='end'){state.event('turn_passed',state.human,state.lords[state.human].campaign_province);finishTurn('Thy lord passed this month.');return;}if(k==='history'){historyScroll=0;mode='history';return;}if(k==='accounts'){mode='accounts';return;}
@@ -834,7 +845,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k==='transfer'){guideTap(k);if(!state.transferHere(state.human))throw Error('Stand within one of thy castles to transfer troops');mode='transfer';resetTransferDraft();return;}
   if(k==='transfer_confirm'&&mode==='transfer'){confirmTransfer(state,state.human,transferDraft);guideTap(k);resetTransferDraft();mode='conquest';return;}
   if(k==='move'){guideTap(k);mode='move';selected=0;return;}
-  if(k==='robin'){state.useRobin();sceneShow('robin_sherwood.png','conquest','Robin pledges aid to thy next enemy battle.','conquest');return;}
+  if(k==='robin'){visitRobin('conquest');return;}
   if(k.startsWith('tactic:')){tactic=k.split(':').slice(1).join(':');return;}
   if(k==='pass_safe'){state.move(state.human,pendingTarget,'Stand and Fight',true);mode='move';selected=pendingTarget;pendingTarget=null;return;}
   if(k==='pass_attack'){attackingAlly=true;if(COUNT(state.defenders(pendingTarget))===0){humanAttack(pendingTarget,'Stand and Fight',false,false);return;}mode='battle';tactic='Stand and Fight';return;}
