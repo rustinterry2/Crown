@@ -815,10 +815,10 @@ function visitRobin(returnTo){
     sceneShow('robin_sherwood.png',returnTo,'Robin pledges aid: My archers shall join thee, my lord, and weaken thy foes in thy next battle.',returnTo);
   }catch(e){alertText(e.message,returnTo,'Robin Hood');}
 }
-// A castle always deserves Battle Orders, even when its garrison is empty.
+// A home castle always deserves Battle Orders, even when its garrison is empty.
 function needsBattleOrders(game,id){
   const pr=game.provinces[id];
-  return Boolean(pr.home_castle||pr.secondary_castle||COUNT(game.defenders(id))>0);
+  return Boolean(pr.home_castle||COUNT(game.defenders(id))>0);
 }
 function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(mode==='scene'){let back=sceneReturn;if(sceneNotice){let n=sceneNotice,b=sceneNoticeBack;sceneNotice='';alertText(n,b,/Robin pledges/.test(n)?'Robin Hood':null);return;}if(back==='__story__')storyNext();else if(back==='__new_campaign__'){mode='setup';render();}else if(back==='__home_attack_intro__')afterHomeIntro();else if(back==='__resume_ai__')resumeAi();else{mode=back;render();}return;}if(mode==='ai_phase')return;
   let key=buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key;
@@ -881,7 +881,7 @@ function humanAttack(id,tactic,passage,showSiege){
   const r=state.move(state.human,id,tactic,passage);
   if(before.owners[id]){holdVisualState(before);pendingHumanFlash=id;}else{clearVisualState();pendingHumanFlash=0;}
   attackingAlly=false;pendingTarget=null;selected=0;
-  const scene=Boolean(castle); // Never skip castle artwork, even for an empty garrison.
+  const scene=Boolean(pr.home_castle||(castle&&showSiege)); // Empty secondary castles retain the quick capture path.
   finishTurn(r.text,scene);if(scene)sceneShow((fac==='Norman'||(!fac&&!SAXON.includes(id)))?'norman_castle.png':'saxon_castle.png','__resume_ai__');
 }
 function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){let id=selectedCastle,pr=state.provinces[id];if(!id||pr.owner!==state.human||pr.home_castle||pr.secondary_castle)throw Error('Choose an owned province without a castle');}let cost=costOf();if(COUNT(quantity))state.purchase(state.human,quantity);if(wantCastle)state.purchaseCastle(state.human,selectedCastle,true);clearQty();finishTurn(`Army purchased for ${cost} gold.`);}
