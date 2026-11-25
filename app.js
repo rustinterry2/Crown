@@ -440,7 +440,133 @@ function renderUploadPreview(){
  button('upload_back','Back',[122,1620,730,1702]);
 }
 
-function renderSetup(){c.drawImage(img['board.png'],0,0);c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);text('A Kingdom Awaits',426,111,'title',INK,'center');text('Choose thy lord and destiny',426,183,'small',LIGHT,'center');rule(232);text('I. Choose Thy Saxon Lord',426,252,'name',INK,'center');let lords=['Wolfric the Wild','Geoffrey Longsword','Cedric of Rotherwood','Wilfred of Ivanhoe'];lords.forEach((l,i)=>{let x=65+188*i,y=315,im=portraitPath(l),w=161,h=199,active=options.character===l;c.fillStyle=active?'#e0aa55':'#855632';c.fillRect(x-8,y-8,w+16,h+16);c.drawImage(im,x,y,w,h);c.lineWidth=active?6:4;c.strokeStyle=active?'#ffe088':'#4d2714';c.strokeRect(x,y,w,h);buttons.push({key:'setup_lord:'+l,rect:[x-8,y-8,x+w+8,651]});text(SHORT[l],x+w/2,530,'small',INK,'center');text(START_RANK[l],x+w/2,578,'small',LIGHT,'center');});button('setup_lord:random','Random Lord',[122,670,730,742],'body',options.character===null);rule(772);text('II. Choose Thy Challenge',426,796,'name',INK,'center');[['easy','Noble Quest','Two Saxon allies; rescue available'],['medium','Norman Peril','One Saxon ally; one lord turns Norman'],['hard','The Last Saxon','No Saxon allies; no maiden rescue']].forEach(([key,title,desc],i)=>{let y=854+i*116;button('setup_difficulty:'+key,title,[122,y,730,y+72],'body',options.difficulty===key);text(desc,426,y+76,'small',LIGHT,'center');});rule(1215);text('III. Choose Thy Kingdom',426,1236,'name',INK,'center');button('setup_map:england','England - Original Map',[122,1323,730,1395],'body',options.map==='england');button('setup_map:random','Random Kingdom',[122,1420,730,1492],'body',options.map==='random');button('setup_map:upload','Upload Map',[122,1510,730,1582],'body',options.map==='upload');rule(1610);button('setup_begin','Begin Campaign',[122,1646,730,1720]);}
+// Setup-only map icons. England uses the original territory hit mask, not
+// a replacement map. Cache its outer coastline so button presses stay fast.
+let setupCoastline=null;
+function getSetupCoastline(){
+  if(setupCoastline||!englandSelectionMask)return setupCoastline;
+  const step=5,gw=Math.ceil(W/step)+2,gh=Math.ceil(H/step)+2;
+  const land=new Uint8Array(gw*gh),sea=new Uint8Array(gw*gh);
+  let left=gw,top=gh,right=0,bottom=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(!englandSelectionMask[y*W+x])continue;
+    const gx=Math.floor(x/step)+1,gy=Math.floor(y/step)+1;
+    land[gy*gw+gx]=1;
+    left=Math.min(left,gx);right=Math.max(right,gx);
+    top=Math.min(top,gy);bottom=Math.max(bottom,gy);
+  }
+  if(left>right||top>bottom)return null;
+  // Only trace sea-connected water, avoiding internal castle/forest cutouts.
+  const queue=[0];sea[0]=1;
+  for(let n=0;n<queue.length;n++){
+    const i=queue[n],x=i%gw,y=Math.floor(i/gw);
+    for(const j of [x?i-1:-1,x<gw-1?i+1:-1,y?i-gw:-1,y<gh-1?i+gw:-1]){
+      if(j>=0&&!land[j]&&!sea[j]){sea[j]=1;queue.push(j);}
+    }
+  }
+  const segments=[];
+  for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+    const i=y*gw+x;if(!land[i])continue;
+    if(sea[i-1])segments.push([x,y,x,y+1]);
+    if(sea[i+1])segments.push([x+1,y,x+1,y+1]);
+    if(sea[i-gw])segments.push([x,y,x+1,y]);
+    if(sea[i+gw])segments.push([x,y+1,x+1,y+1]);
+  }
+  return setupCoastline={left,top,w:right-left+1,h:bottom-top+1,segments};
+}
+function setupMapIcon(kind,cx,cy){
+  c.save();c.translate(cx,cy);c.strokeStyle=INK;c.lineWidth=4;
+  c.lineCap='round';c.lineJoin='round';c.beginPath();
+  if(kind==='england'){
+    const coast=getSetupCoastline();
+    if(coast){
+      const s=Math.min(132/coast.w,172/coast.h);
+      const ox=coast.left+coast.w/2,oy=coast.top+coast.h/2;
+      for(const [x1,y1,x2,y2] of coast.segments){
+        c.moveTo((x1-ox)*s,(y1-oy)*s);
+        c.lineTo((x2-ox)*s,(y2-oy)*s);
+      }
+    }
+  }else if(kind==='random'){
+    // A fictional irregular coastline, distinct from England.
+    const pts=[[-23,-83],[4,-76],[23,-84],[42,-65],[36,-44],[59,-29],[64,-7],[47,9],[58,32],[41,53],[13,56],[-3,81],[-29,71],[-37,47],[-60,34],[-52,14],[-64,-5],[-46,-22],[-49,-46],[-29,-53]];
+    pts.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();
+  }else{
+    // Upload arrow and open tray, drawn in the same sepia outline style.
+    c.moveTo(0,28);c.lineTo(0,-66);
+    c.moveTo(-35,-31);c.lineTo(0,-66);c.lineTo(35,-31);
+    c.moveTo(-57,15);c.lineTo(-57,56);c.lineTo(57,56);c.lineTo(57,15);
+  }
+  c.stroke();c.restore();
+}
+function setupMapButton(kind,label,x,y){
+  const key='setup_map:'+kind,rect=[x,y,x+184,y+222];
+  const active=options.map===kind,pressed=pressedKey===key;
+  // The caption is outside the frame but is also a usable tap target.
+  buttons.push({key,rect:[x,y,x+184,y+282]});
+  buttonFrame(rect,active,true,pressed);
+  if(active){c.strokeStyle='#ffe088';c.lineWidth=4;c.strokeRect(x+13,y+13,158,196);}
+  setupMapIcon(kind,x+92+(pressed?2:0),y+111+(pressed?4:0));
+  text(label,x+92,y+229,'small',active?INK:LIGHT,'center');
+}
+function setupCampaignButton(rect){
+  const key='setup_begin',pressed=pressedKey===key;
+  const [x,y,x2,y2]=rect,cx=(x+x2)/2,cy=(y+y2)/2;
+  buttons.push({key,rect});
+  buttonFrame(rect,false,true,pressed);
+  c.save();
+  const g=c.createLinearGradient(x,y,x,y2);
+  g.addColorStop(0,pressed?'#b3854b':'#eac788');
+  g.addColorStop(.5,pressed?'#c49b5f':'#d7ae72');
+  g.addColorStop(1,pressed?'#a8763c':'#c39558');
+  c.fillStyle=g;c.fillRect(x+10,y+10,x2-x-20,y2-y-20);
+  c.strokeStyle='#80512d';c.lineWidth=3;c.strokeRect(x+16,y+16,x2-x-32,y2-y-32);
+  c.strokeStyle='#f0ce93';c.lineWidth=2;c.strokeRect(x+22,y+22,x2-x-44,y2-y-44);
+  // Small heraldic diamonds and restrained scroll-like flourishes.
+  for(const yy of [cy-66,cy+66]){
+    c.strokeStyle='#8b4f26';c.lineWidth=2;c.beginPath();
+    c.moveTo(cx-102,yy);c.lineTo(cx-16,yy);
+    c.moveTo(cx+16,yy);c.lineTo(cx+102,yy);c.stroke();
+    c.fillStyle='#8b4f26';c.beginPath();c.moveTo(cx,yy-9);
+    c.lineTo(cx+10,yy);c.lineTo(cx,yy+9);c.lineTo(cx-10,yy);c.closePath();c.fill();
+  }
+  const style=width('Begin Campaign','title')<=x2-x-60?'title':'name';
+  text('Begin Campaign',cx+(pressed?2:0),cy-fontMetrics[style].tile[1]/2+(pressed?4:0),style,INK,'center');
+  c.restore();
+}
+function renderSetup(){
+  c.drawImage(img['board.png'],0,0);
+  c.fillStyle='#e4bb81';c.fillRect(49,80,754,1692);
+  c.strokeStyle='#61391f';c.lineWidth=9;c.strokeRect(49,80,754,1692);
+
+  text('Choose Thy Saxon Lord',426,98,'name',INK,'center');
+  const lords=['Wolfric the Wild','Geoffrey Longsword','Cedric of Rotherwood','Wilfred of Ivanhoe'];
+  lords.forEach((l,i)=>{
+    const x=65+188*i,y=183,im=portraitPath(l),w=161,h=199,active=options.character===l;
+    c.fillStyle=active?'#e0aa55':'#855632';c.fillRect(x-8,y-8,w+16,h+16);
+    c.drawImage(im,x,y,w,h);c.lineWidth=active?6:4;
+    c.strokeStyle=active?'#ffe088':'#4d2714';c.strokeRect(x,y,w,h);
+    buttons.push({key:'setup_lord:'+l,rect:[x-8,y-8,x+w+8,489]});
+    text(SHORT[l],x+w/2,389,'small',INK,'center');
+    text(START_RANK[l],x+w/2,438,'small',LIGHT,'center');
+  });
+  button('setup_lord:random','Random Lord',[122,499,730,571],'body',options.character===null);
+  rule(590);
+
+  text('Choose Thy Challenge',426,607,'name',INK,'center');
+  [['easy','Fair'],['medium','Stout'],['hard','Grievous']].forEach(([key,label],i)=>{
+    const y=680+i*80;
+    button('setup_difficulty:'+key,label,[122,y,730,y+72],'body',options.difficulty===key);
+  });
+  rule(929);
+
+  text('Choose Thy Kingdom',426,946,'name',INK,'center');
+  setupMapButton('england','England',122,1020);
+  setupMapButton('random','Random',334,1020);
+  setupMapButton('upload','Upload',546,1020);
+  rule(1314);
+  setupCampaignButton([122,1338,730,1745]);
+}
 function drawOrders(){header('Your orders?',status());[['conquest','Seek Conquest',1186],['army','Build Army',1284],['read','Read Map',1382],['end','End Month',1484],['history','Chronicle',1570]].forEach(([k,s,y])=>button(k,s,[85,y,505,y+82]));drawPortrait(state.human,[565,1140,751,1350]);text('Leadership',658,1396,'small',LIGHT,'center');text(state.rank(state.human),658,1450,'small',INK,'center');let p=state.lords[state.human];if(p.spouse){drawPortrait('Lady Catherine',[565,1494,751,1704]);text(`${SHORT[state.human]} of ${T[p.home_province][0]}`,285,1697,'small',INK,'center');}else fit(`${SHORT[state.human]} of ${T[p.home_province][0]}  /  Robin: ${p.robin_uses_remaining}`,426,1690);}
 function drawRead(){
   header('Read Map','Tap any territory above');
