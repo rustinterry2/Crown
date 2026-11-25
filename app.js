@@ -1,5 +1,5 @@
 import {randomMap,uploadedMap} from './random-map.js';
-import {CrownState,Rng,T,IDS,SAXON,SAXONS,NORMANS,SHORT,TIERS,LEAD,START_RANK,COLORS,HORSES,CASTLE_POS,PRICES,U,SUMMARY,COUNT,MONTH,ENGLAND,CASTLES} from './engine.js?v=1b1f6f28';
+import {CrownState,Rng,T,IDS,SAXON,SAXONS,NORMANS,SHORT,TIERS,LEAD,START_RANK,COLORS,HORSES,CASTLE_POS,PRICES,U,SUMMARY,COUNT,MONTH,ENGLAND,CASTLES} from './engine.js?v=stronghold-20261125';
 const W=852,H=1846,A='assets/';const gameCanvas=document.getElementById('game'),c=gameCanvas.getContext('2d',{alpha:false});
 const color=(a)=>`rgb(${a.join(',')})`;const INK='#432018',LIGHT='#663021',BEIGE='#d3ab73';
 const img={}, buttons=[];let fontMetrics,atlas,hit,paint,baseData,hitData,paintData,assetMap={};
@@ -576,16 +576,16 @@ function drawRead(){
   }else if(selected&&T[selected]){
     const id=selected,pr=state.provinces[id],owner=pr.owner,portrait=owner&&state.lords[owner].home_province===id;
     text(T[id][0],426,1194,'name',INK,'center');rule(1280);
-    [['Owner',owner?SHORT[owner]:'Unclaimed'],['Gold / month',T[id][1]],['Vassals left',state.remainingVassals(id)],['Castle',pr.home_castle?'Home':pr.secondary_castle?'Built':'None']].forEach(([k,v],i)=>{
+    [['Owner',owner?SHORT[owner]:'Unclaimed'],['Gold / month',T[id][1]],['Vassals left',state.remainingVassals(id)],['Fortification',pr.home_castle?'Stronghold':pr.secondary_castle?'Castle':'None']].forEach(([k,v],i)=>{
       text(k,115,1310+i*61,'small',LIGHT);text(v,portrait?515:705,1310+i*61,'small',INK,'right');
     });
     if(portrait)drawPortrait(owner,[550,1304,740,1545]);
   }else lines(['Touch a province to learn its','owner, income, vassals and lord.','Read Map costs no turn.'],1250,90);
   button('back','Back to Orders',[165,1644,687,1716]);
 }
-function drawConquest(){let p=state.lords[state.human],r=state.castleReserve(state.human);header('Seek Conquest',status());lines([`At: ${T[p.campaign_province][0]}`,`Castle: ${SUMMARY(r||p.home_army)}`,`Field: ${SUMMARY(p.campaign_army)}`,`Robin: ${p.robin_uses_remaining} times left${state.robin_pending?' - Pledged':''}`],1188,63,'small');button('transfer','Transfer Troops',[165,1460,687,1532]);button('move','Move Army',[165,1540,687,1612]);button('robin','See Robin',[165,1620,687,1692]);button('back','Back',[165,1700,687,1772]);}
-function drawArmy(){let p=state.lords[state.human];header('Build Army',`Treasury: ${p.treasury} gold  /  Income: ${state.income(state.human)}`);[['soldiers','Soldiers',1],['knights','Knights',8],['catapults','Catapults',15],['castle','Castle',20]].forEach(([u,label,cost],i)=>{let y=1180+i*74;text(`${label}  ${cost} g`,123,y+6,'body',INK);text(u==='castle'?+(wantCastle):quantity[u],550,y+7,'body',INK,'right');button('minus:'+u,'-',[577,y,638,y+62]);button('plus:'+u,'+',[662,y,724,y+62]);});text('Field troops: '+SUMMARY(p.campaign_army),426,1474,'small',INK,'center');text('Home castle: '+SUMMARY(p.home_army),426,1528,'small',INK,'center');let cost=costOf();text(`Total: ${cost}   Remaining: ${Math.max(0,p.treasury-cost)}`,426,1582,'small',INK,'center');button('buy','Confirm Purchase',[165,1634,687,1699]);button('back','Back',[165,1710,687,1775]);}
-function drawCastlePick(){header('Place Thy Castle','Tap an owned province without a castle');text(selectedCastle?T[selectedCastle][0]:'None selected',426,1262,'name',INK,'center');lines(['Castle cost: 20 gold','Includes a 10 soldier garrison','This purchase ends your turn'],1382,70,'small');button('build_confirm','Confirm Purchase',[165,1598,687,1670]);button('back','Cancel',[165,1678,687,1750]);}
+function drawConquest(){let p=state.lords[state.human],r=state.castleReserve(state.human);header('Seek Conquest',status());lines([`At: ${T[p.campaign_province][0]}`,`${r&& !state.provinces[p.campaign_province].home_castle?'Castle':'Stronghold'}: ${SUMMARY(r||p.home_army)}`,`Field: ${SUMMARY(p.campaign_army)}`,`Robin: ${p.robin_uses_remaining} times left${state.robin_pending?' - Pledged':''}`],1188,63,'small');button('transfer','Transfer Troops',[165,1460,687,1532]);button('move','Move Army',[165,1540,687,1612]);button('robin','See Robin',[165,1620,687,1692]);button('back','Back',[165,1700,687,1772]);}
+function drawArmy(){let p=state.lords[state.human];header('Build Army',`Treasury: ${p.treasury} gold  /  Income: ${state.income(state.human)}`);[['soldiers','Soldiers',1],['knights','Knights',8],['catapults','Catapults',15],['castle','Castle',20]].forEach(([u,label,cost],i)=>{let y=1180+i*74;text(`${label}  ${cost} g`,123,y+6,'body',INK);text(u==='castle'?+(wantCastle):quantity[u],550,y+7,'body',INK,'right');button('minus:'+u,'-',[577,y,638,y+62]);button('plus:'+u,'+',[662,y,724,y+62]);});text('Field troops: '+SUMMARY(p.campaign_army),426,1474,'small',INK,'center');text('Stronghold: '+SUMMARY(p.home_army),426,1528,'small',INK,'center');let cost=costOf();text(`Total: ${cost}   Remaining: ${Math.max(0,p.treasury-cost)}`,426,1582,'small',INK,'center');button('buy','Confirm Purchase',[165,1634,687,1699]);button('back','Back',[165,1710,687,1775]);}
+function drawCastlePick(){header('Place Thy Castle','Tap owned land without fortifications');text(selectedCastle?T[selectedCastle][0]:'None selected',426,1262,'name',INK,'center');lines(['Castle cost: 20 gold','Includes a 10 soldier garrison','This purchase ends your turn'],1382,70,'small');button('build_confirm','Confirm Purchase',[165,1598,687,1670]);button('back','Cancel',[165,1678,687,1750]);}
 // A signed draft represents the net number moving from castle to field.
 // Positive values go right; negative values go left. No engine state is
 // changed until the player confirms.
@@ -600,7 +600,7 @@ function changeTransferDraft(reserve,field,draft,u,dir){
 }
 function confirmTransfer(game,l,draft){
   const reserve=game.castleReserve(l),field=game.lords[l].campaign_army;
-  if(!reserve)throw Error('Stand within one of thy castles to transfer troops');
+  if(!reserve)throw Error('Stand at thy Stronghold or a Castle to transfer troops');
   // Validate every troop type before applying either direction.
   for(const u of U)if(!Number.isInteger(draft[u])||draft[u]>reserve[u]||draft[u]<-field[u])throw Error('Not enough '+u+' to transfer');
   const out=Object.fromEntries(U.map(u=>[u,Math.max(0,draft[u])]));
@@ -621,15 +621,19 @@ function transferArrow(key,rect,dir,enabled){
 }
 function drawTransfer(){
   const p=state.lords[state.human],r=state.castleReserve(state.human);
-  header('Transfer Troops',`At: ${T[p.campaign_province][0]} castle`);
-  if(!r){lines(['Thy field army must be at one of','thy castles to transfer troops.'],1310,70);button('back','Back',[165,1668,687,1740]);return;}
+  const fort=state.provinces[p.campaign_province].home_castle?'Stronghold':'Castle';
+  header('Transfer Troops',`At: ${T[p.campaign_province][0]}${r?' '+fort:''}`);
+  if(!r){lines(['Thy field army must be at thy','Stronghold or a Castle to transfer troops.'],1310,70);button('back','Back',[165,1668,687,1740]);return;}
+  // Column headings leave enough room for the longer Stronghold label.
+  text(fort,345,1182,'small',LIGHT,'center');
+  text('Field',654,1182,'small',LIGHT,'center');
   U.forEach((u,i)=>{
     const y=1250+i*120,[castle,field]=transferAmounts(r,p.campaign_army,transferDraft,u);
     text(u[0].toUpperCase()+u.slice(1),85,y,'small');
-    text('Castle:'+castle,430,y,'small',INK,'right');
+    text(castle,345,y,'small',INK,'center');
     transferArrow('transfer_left:'+u,[442,y-7,504,y+57],-1,field>0);
     transferArrow('transfer_right:'+u,[518,y-7,580,y+57],1,castle>0);
-    text('Field:'+field,594,y,'small');
+    text(field,654,y,'small',INK,'center');
   });
   button('transfer_confirm','Confirm',[165,1581,687,1653]);
   button('back','Back',[165,1668,687,1740]);
@@ -673,13 +677,13 @@ function ledgerEntry(r,chronicle=false){
     case 'claim':text=(r.old_owner?'Captured ':'Claimed ')+p+(r.vassals_added?' and recruited '+r.vassals_added+' vassals':'')+'.';break;
     case 'unopposed_capture':text='Took '+p+' without resistance.';break;
     case 'battle':text=(r.won?'Defeated ':'Was repelled by ')+enemy+' at '+p+'. '+n+' lost '+r.losses+'; '+enemy+' lost '+r.defenders_lost+'.';break;
-    case 'casualties':if(!unitList(r.loss))return null;text='Lost '+unitList(r.loss)+' ('+r.kind+').';break;
+    case 'casualties':if(!unitList(r.loss))return null;text='Lost '+unitList(r.loss)+' ('+(r.kind==='home'||(r.kind==='castle'&&state.provinces[r.province]?.home_castle)?'Stronghold':r.kind==='castle'?'Castle':r.kind)+').';break;
     case 'lord_defeated':text='Defeated '+SHORT[r.defeated]+' at '+p+'. Remaining lands abandoned.';break;
     case 'army_retreated':text='Withdrew from '+(T[r.from_province]?.[0]||'the field')+' to '+p+'.';break;
     case 'march':text='Marched to '+p+'.';break;
     case 'safe_passage':text='Passed safely through '+p+'.';break;
     case 'purchase_troops':text='Recruited '+unitList(r.units)+' for '+r.cost+' gold.';break;
-    case 'transfer':if(chronicle)return null;text='Moved '+unitList(r.units)+(r.direction==='out'?' to the field':' into the castle')+' at '+p+'.';break;
+    case 'transfer':if(chronicle)return null;text='Moved '+unitList(r.units)+(r.direction==='out'?' to the field':' into the '+(r.fortification||(state.provinces[r.province]?.home_castle?'Stronghold':'Castle')))+' at '+p+'.';break;
     case 'build_castle':text='Built a castle at '+p+'.';break;
     case 'monthly_tax':if(chronicle&&r.lord!==state.human)return null;text='Received '+r.received+' gold in taxes (treasury '+r.balance+').';break;
     case 'alliance_broken':text='Broke alliance with '+SHORT[r.enemy]+'.';break;
@@ -744,7 +748,7 @@ function reportHit(x,y){return mode==='report'&&x>=REPORT_VIEW.left&&x<=REPORT_V
 function drawReport(){
   const layout=reportLayout(reportEntries),v=REPORT_VIEW,viewHeight=v.bottom-v.top,max=reportScrollLimit(layout);
   reportScroll=Math.max(0,Math.min(reportScroll,max));
-  header(state.outcome==='victory'?'The Crown Is Thine':state.outcome==='defeat'?'Thy Castle Is Lost':'The Month Passes',reportMonth);
+  header(state.outcome==='victory'?'The Crown Is Thine':state.outcome==='defeat'?'Thy Stronghold Is Lost':'The Month Passes',reportMonth);
   c.save();c.beginPath();c.rect(v.left,v.top,v.right-v.left-20,viewHeight);c.clip();
   for(const row of layout.rows){
     const y=v.top+row.y-reportScroll;if(y+52<v.top||y>v.bottom)continue;
@@ -768,7 +772,7 @@ function drawHistory(){
   if(historyScroll+1<pages.length)button('history_older','Older',[597,1552,767,1614],'small');
   button('accounts','Royal Accounts',[90,1640,500,1712],'small');button('back','Back',[530,1640,762,1712]);
 }
-function drawAccounts(){let p=state.lords[state.human];header('Royal Accounts',status());let rows=[['Provinces',`${state.territoryCount(state.human)} of 18`],['Treasury',`${p.treasury} gold`],['Gold earned',p.gold_earned_total],['Gold spent',p.gold_spent_total],['Monthly income',state.income(state.human)],['Vassals recruited',p.vassals_recruited_total],['Troops lost',p.troops_lost_total],['Castles built',IDS.filter(id=>state.provinces[id].owner===state.human&&state.provinces[id].secondary_castle).length],['Leadership',state.rank(state.human)]];rows.forEach(([k,v],i)=>{text(k,132,1177+i*47,'small',LIGHT);text(v,705,1177+i*47,'small',INK,'right');});text('Home '+SUMMARY(p.home_army),426,1602,'small',INK,'center');text('Field '+SUMMARY(p.campaign_army),426,1644,'small',INK,'center');button('back_history','Back to Chronicle',[165,1678,687,1750]);}
+function drawAccounts(){let p=state.lords[state.human];header('Royal Accounts',status());let rows=[['Provinces',`${state.territoryCount(state.human)} of 18`],['Treasury',`${p.treasury} gold`],['Gold earned',p.gold_earned_total],['Gold spent',p.gold_spent_total],['Monthly income',state.income(state.human)],['Vassals recruited',p.vassals_recruited_total],['Troops lost',p.troops_lost_total],['Castles built',IDS.filter(id=>state.provinces[id].owner===state.human&&state.provinces[id].secondary_castle).length],['Leadership',state.rank(state.human)]];rows.forEach(([k,v],i)=>{text(k,132,1177+i*47,'small',LIGHT);text(v,705,1177+i*47,'small',INK,'right');});text('Stronghold '+SUMMARY(p.home_army),426,1602,'small',INK,'center');text('Field '+SUMMARY(p.campaign_army),426,1644,'small',INK,'center');button('back_history','Back to Chronicle',[165,1678,687,1750]);}
 // Fit the entire royal message into a reserved area above Continue.
 // Prefer normal-sized type, then compact type, then proportional scaling.
 // Never truncate dialogue, including notices displayed beside a portrait.
@@ -903,8 +907,8 @@ function nextAiStep(){
   loop();
 }
 function resumeAi(){mode='ai_phase';render();setTimeout(nextAiStep,260);}
-function afterHomeIntro(){let e=pendingHomeAttack;alertText(`${SHORT[e.attacker]} has reached ${T[e.target][0]}. Thy home castle is under attack! Man the walls and beat back the invader.`,'__home_flash__');}
-function afterHomeFlash(){mode='ai_phase';render();showFlash(pendingHomeAttack.target,()=>{if(pendingHomeAttack.won)alertText('Thy men have held the castle. The invader is thrown back from thy gates.','__home_resume__');else alertText('Thy home castle has fallen. With its loss, thy cause in England is ended.','__home_defeat__');});}
+function afterHomeIntro(){let e=pendingHomeAttack;alertText(`${SHORT[e.attacker]} has reached ${T[e.target][0]}. Thy Stronghold is under attack! Man the walls and beat back the invader.`,'__home_flash__');}
+function afterHomeFlash(){mode='ai_phase';render();showFlash(pendingHomeAttack.target,()=>{if(pendingHomeAttack.won)alertText('Thy men have held the Stronghold. The invader is thrown back from thy gates.','__home_resume__');else alertText('Thy Stronghold has fallen. With its loss, thy cause in England is ended.','__home_defeat__');});}
 function provinceAt(x,y){if(y<120||y>950||x<15||x>838)return 0;if(mapInfo?.type==='random'){let lx=Math.floor(x/4),ly=Math.floor(y/4);return mapInfo.cells[ly*mapInfo.w+lx]||0;}return englandSelectionMask?.[Math.floor(y)*W+Math.floor(x)]||0;}
 function isSherwood(x,y){
   const [fx,fy]=sherwoodCenter();
@@ -980,7 +984,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k==='report_ok'){if(state.outcome)showEnding();else enterOrders(true);return;}
   if(k==='tournament_yes'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,.04);let r=state.changeRank(state.human,1);storyBegin([['scene','tournament_trumpets.png'],['text','Heralds sound their trumpets, and the lords gather before the lists.'],['scene','tournament_joust.png'],['text',`Before the assembled court, thou hast ridden with courage and won new renown. Thy leadership is now ${r}.`]]);return;}
   if(k==='tournament_no'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);alertText(`Thou hast declined the tournament. Thy leadership is now ${r}.`,'orders');return;}
-  if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thirty soldiers await thee at ${T[state.lords[ally].home_province][0]} castle. Thy leadership is now ${r}.`]]);return;}
+  if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thirty soldiers await thee at ${T[state.lords[ally].home_province][0]} Stronghold. Thy leadership is now ${r}.`]]);return;}
   if(k==='maiden_no'){state.maiden_rescue_done=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);pendingMaiden=null;alertText(`Thou hast refused the plea. Thy leadership is now ${r}.`,'orders');return;}
   if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;attackingAlly=false;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
   if(k==='read'){mode='read';selected=0;return;}if(k==='conquest'){guideTap(k);mode='conquest';return;}if(k==='army'){clearQty();mode='army';return;}if(k==='end'){state.event('turn_passed',state.human,state.lords[state.human].campaign_province);finishTurn('Thy lord passed this month.');return;}if(k==='history'){historyScroll=0;mode='history';return;}if(k==='accounts'){mode='accounts';return;}
@@ -993,7 +997,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k.startsWith('minus:')||k.startsWith('plus:')){let sign=k.startsWith('plus:')?1:-1,u=k.split(':')[1];if(u==='castle'){if(sign<0)wantCastle=false;else if(state.lords[state.human].treasury>=costOf()+20)wantCastle=true;return;}let step=u==='soldiers'?5:1;if(mode==='army'){let available=state.lords[state.human].treasury-costOf();if(sign>0)quantity[u]+=Math.max(0,Math.min(step,Math.floor(available/PRICES[u])));else quantity[u]=Math.max(0,quantity[u]-step);}return;}
   if(k==='buy'){if(costOf()<=0)throw Error('Choose soldiers, knights, catapults or a castle');if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){mode='castle_pick';selectedCastle=null;return;}completePurchase();return;}
   if(k==='build_confirm'){completePurchase();return;}
-  if(k==='transfer'){guideTap(k);if(!state.transferHere(state.human))throw Error('Stand within one of thy castles to transfer troops');mode='transfer';resetTransferDraft();return;}
+  if(k==='transfer'){guideTap(k);if(!state.transferHere(state.human))throw Error('Stand at thy Stronghold or a Castle to transfer troops');mode='transfer';resetTransferDraft();return;}
   if(k==='transfer_confirm'&&mode==='transfer'){confirmTransfer(state,state.human,transferDraft);guideTap(k);resetTransferDraft();mode='conquest';return;}
   if(k==='move'){guideTap(k);mode='move';selected=0;return;}
   if(k==='robin'){visitRobin('conquest');return;}
@@ -1010,7 +1014,7 @@ function humanAttack(id,tactic,passage,showSiege){
   const scene=Boolean(pr.home_castle||(castle&&showSiege)); // Empty secondary castles retain the quick capture path.
   finishTurn(r.text,scene);if(scene)sceneShow((fac==='Norman'||(!fac&&!SAXON.includes(id)))?'norman_castle.png':'saxon_castle.png','__resume_ai__');
 }
-function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){let id=selectedCastle,pr=state.provinces[id];if(!id||pr.owner!==state.human||pr.home_castle||pr.secondary_castle)throw Error('Choose an owned province without a castle');}let cost=costOf();if(COUNT(quantity))state.purchase(state.human,quantity);if(wantCastle)state.purchaseCastle(state.human,selectedCastle,true);clearQty();finishTurn(`Army purchased for ${cost} gold.`);}
+function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){let id=selectedCastle,pr=state.provinces[id];if(!id||pr.owner!==state.human||pr.home_castle||pr.secondary_castle)throw Error('Choose owned land without a Stronghold or Castle');}let cost=costOf();if(COUNT(quantity))state.purchase(state.human,quantity);if(wantCastle)state.purchaseCastle(state.human,selectedCastle,true);clearQty();finishTurn(`Army purchased for ${cost} gold.`);}
 function pointerPosition(ev){const r=gameCanvas.getBoundingClientRect();return [(ev.clientX-r.left)*W/r.width,(ev.clientY-r.top)*H/r.height];}
 function buttonAt(x,y){return buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key||null;}
 gameCanvas.addEventListener('pointerdown',ev=>{
