@@ -643,14 +643,33 @@ function drawHistory(){
   button('accounts','Royal Accounts',[90,1640,500,1712],'small');button('back','Back',[530,1640,762,1712]);
 }
 function drawAccounts(){let p=state.lords[state.human];header('Royal Accounts',status());let rows=[['Provinces',`${state.territoryCount(state.human)} of 18`],['Treasury',`${p.treasury} gold`],['Gold earned',p.gold_earned_total],['Gold spent',p.gold_spent_total],['Monthly income',state.income(state.human)],['Vassals recruited',p.vassals_recruited_total],['Troops lost',p.troops_lost_total],['Castles built',IDS.filter(id=>state.provinces[id].owner===state.human&&state.provinces[id].secondary_castle).length],['Leadership',state.rank(state.human)]];rows.forEach(([k,v],i)=>{text(k,132,1177+i*47,'small',LIGHT);text(v,705,1177+i*47,'small',INK,'right');});text('Home '+SUMMARY(p.home_army),426,1602,'small',INK,'center');text('Field '+SUMMARY(p.campaign_army),426,1644,'small',INK,'center');button('back_history','Back to Chronicle',[165,1678,687,1750]);}
+// Fit the entire royal message into a reserved area above Continue.
+// Prefer normal-sized type, then compact type, then proportional scaling.
+// Never truncate dialogue, including notices displayed beside a portrait.
+function noticeLayout(value,areaWidth,areaHeight){
+  let fallback=null;
+  for(const style of ['body','small']){
+    const tile=fontMetrics[style].tile[1],rows=wrap(value,style,areaWidth),step=tile+5;
+    const height=tile+Math.max(0,rows.length-1)*step;
+    const longest=Math.max(1,...rows.map(line=>width(line,style)));
+    const scale=Math.min(1,areaHeight/height,areaWidth/longest);
+    const layout={style,rows,step,height,scale};
+    if(scale===1)return layout;
+    if(!fallback||scale*tile>fallback.scale*fontMetrics[fallback.style].tile[1])fallback=layout;
+  }
+  return fallback;
+}
 function drawNotice(){
   header('A Royal Message',status());
-  if(noticePortrait==='Robin Hood'){
-    drawPortrait('Robin Hood',[540,1177,753,1440]);
-    wrap(message,'body',365).slice(0,5).forEach((line,i)=>text(line,294,1220+i*77,'body',LIGHT,'center'));
-  }else{
-    wrap(message,'body',600).slice(0,7).forEach((line,i)=>text(line,426,1235+i*75,'body',LIGHT,'center'));
-  }
+  const hasPortrait=noticePortrait==='Robin Hood';
+  if(hasPortrait)drawPortrait('Robin Hood',[540,1177,753,1440]);
+  const x=hasPortrait?298:426,top=1180,bottom=1600,areaWidth=hasPortrait?390:650;
+  const layout=noticeLayout(message,areaWidth,bottom-top);
+  const y=top+(bottom-top-layout.height*layout.scale)/2;
+  c.save();
+  c.translate(x,y);c.scale(layout.scale,layout.scale);
+  layout.rows.forEach((line,i)=>text(line,0,i*layout.step,layout.style,LIGHT,'center'));
+  c.restore();
   button('notice_ok','Continue',[165,1626,687,1698]);
 }
 function drawInvitation(maiden){
