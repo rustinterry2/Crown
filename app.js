@@ -868,8 +868,12 @@ function monthReportRecords(ledger,turn){
   return [...current.filter(r=>r.action==='monthly_tax'),...current.filter(r=>r.action!=='monthly_tax')];
 }
 function finishReport(){
+  aiRunning=false;
+  // A finished campaign goes straight to its existing ending sequence.
+  // Callers reach this point only after the final battle/notice completes.
+  if(state.outcome){showEnding();return;}
   reportEntries=ledgerEntries(monthReportRecords(state.ledger,reportTurn));
-  mode='report';reportScroll=0;aiRunning=false;render();
+  mode='report';reportScroll=0;render();
 }
 function nextAiStep(){
   if(mode!=='ai_phase'||aiRunning)return;
