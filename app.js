@@ -815,6 +815,11 @@ function visitRobin(returnTo){
     sceneShow('robin_sherwood.png',returnTo,'Robin pledges aid: My archers shall join thee, my lord, and weaken thy foes in thy next battle.',returnTo);
   }catch(e){alertText(e.message,returnTo,'Robin Hood');}
 }
+// A castle always deserves Battle Orders, even when its garrison is empty.
+function needsBattleOrders(game,id){
+  const pr=game.provinces[id];
+  return Boolean(pr.home_castle||pr.secondary_castle||COUNT(game.defenders(id))>0);
+}
 function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(mode==='scene'){let back=sceneReturn;if(sceneNotice){let n=sceneNotice,b=sceneNoticeBack;sceneNotice='';alertText(n,b,/Robin pledges/.test(n)?'Robin Hood':null);return;}if(back==='__story__')storyNext();else if(back==='__new_campaign__'){mode='setup';render();}else if(back==='__home_attack_intro__')afterHomeIntro();else if(back==='__resume_ai__')resumeAi();else{mode=back;render();}return;}if(mode==='ai_phase')return;
   let key=buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key;
   if(key){try{action(key);}catch(e){console.error(e);if(mode==='setup'||mode==='upload_preview'){uploadError=e.message;uploadBusy=false;mode='upload_preview';}else alertText(e.message);}render();if(!['ai_phase'].includes(mode))return;}
@@ -832,13 +837,14 @@ function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(m
   if(mode==='castle_pick'){selected=id;selectedCastle=id;render();return;}
   if(mode==='move'){
     let [ok,why]=state.legalMove(state.human,id);if(!ok){alertText(why,'move');return;}guide=guide==='province'&&guideTarget===id?'off':guide;
-    pendingTarget=id;selected=id;let owner=state.provinces[id].owner;if(owner===state.human){state.move(state.human,id);render();return;}
-    if(!owner||(!state.friendly(state.human,owner)&&COUNT(state.defenders(id))===0)){
-      if(owner){humanAttack(id,'Stand and Fight',true,false);return;}
-      const result=state.move(state.human,id);clearVisualState();pendingHumanFlash=0;
-      finishTurn(result.text);return;
-    }
-    if(state.friendly(state.human,owner)){mode='passage';render();return;}mode='battle';tactic='Stand and Fight';render();
+    pendingTarget=id;selected=id;attackingAlly=false;
+    const pr=state.provinces[id],owner=pr.owner;
+    if(owner===state.human){state.move(state.human,id);render();return;}
+    if(state.friendly(state.human,owner)){mode='passage';render();return;}
+    if(needsBattleOrders(state,id)){mode='battle';tactic='Stand and Fight';render();return;}
+    if(owner){humanAttack(id,'Stand and Fight',true,false);return;}
+    const result=state.move(state.human,id);clearVisualState();pendingHumanFlash=0;
+    finishTurn(result.text);
   }
 }
 function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.character=k.endsWith(':random')?null:k.split(':').slice(1).join(':');else if(k.startsWith('setup_difficulty:'))options.difficulty=k.split(':')[1];else if(k==='setup_map:upload'){openMapPicker();}else if(k.startsWith('setup_map:'))options.map=k.split(':')[1];else if(k==='setup_begin')startCampaign();return;}
@@ -850,7 +856,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k==='tournament_no'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);alertText(`Thou hast declined the tournament. Thy leadership is now ${r}.`,'orders');return;}
   if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thirty soldiers await thee at ${T[state.lords[ally].home_province][0]} castle. Thy leadership is now ${r}.`]]);return;}
   if(k==='maiden_no'){state.maiden_rescue_done=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);pendingMaiden=null;alertText(`Thou hast refused the plea. Thy leadership is now ${r}.`,'orders');return;}
-  if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
+  if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;attackingAlly=false;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
   if(k==='read'){mode='read';selected=0;return;}if(k==='conquest'){guideTap(k);mode='conquest';return;}if(k==='army'){clearQty();mode='army';return;}if(k==='end'){state.event('turn_passed',state.human,state.lords[state.human].campaign_province);finishTurn('Thy lord passed this month.');return;}if(k==='history'){historyScroll=0;mode='history';return;}if(k==='accounts'){mode='accounts';return;}
   if(mode==='transfer'&&(k.startsWith('transfer_left:')||k.startsWith('transfer_right:'))){
     const r=state.castleReserve(state.human),u=k.split(':')[1];
@@ -867,7 +873,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k==='robin'){visitRobin('conquest');return;}
   if(k.startsWith('tactic:')){tactic=k.split(':').slice(1).join(':');return;}
   if(k==='pass_safe'){state.move(state.human,pendingTarget,'Stand and Fight',true);mode='move';selected=pendingTarget;pendingTarget=null;return;}
-  if(k==='pass_attack'){attackingAlly=true;if(COUNT(state.defenders(pendingTarget))===0){humanAttack(pendingTarget,'Stand and Fight',false,false);return;}mode='battle';tactic='Stand and Fight';return;}
+  if(k==='pass_attack'){attackingAlly=true;if(!needsBattleOrders(state,pendingTarget)){humanAttack(pendingTarget,'Stand and Fight',false,false);return;}mode='battle';tactic='Stand and Fight';return;}
   if(k==='fight'){humanAttack(pendingTarget,tactic,!attackingAlly,true);return;}
 }
 function humanAttack(id,tactic,passage,showSiege){
@@ -875,8 +881,8 @@ function humanAttack(id,tactic,passage,showSiege){
   const r=state.move(state.human,id,tactic,passage);
   if(before.owners[id]){holdVisualState(before);pendingHumanFlash=id;}else{clearVisualState();pendingHumanFlash=0;}
   attackingAlly=false;pendingTarget=null;selected=0;
-  const scene=Boolean(castle&&showSiege);
-  finishTurn(r.text,scene);if(scene)sceneShow(fac==='Norman'?'norman_castle.png':'saxon_castle.png','__resume_ai__');
+  const scene=Boolean(castle); // Never skip castle artwork, even for an empty garrison.
+  finishTurn(r.text,scene);if(scene)sceneShow((fac==='Norman'||(!fac&&!SAXON.includes(id)))?'norman_castle.png':'saxon_castle.png','__resume_ai__');
 }
 function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){let id=selectedCastle,pr=state.provinces[id];if(!id||pr.owner!==state.human||pr.home_castle||pr.secondary_castle)throw Error('Choose an owned province without a castle');}let cost=costOf();if(COUNT(quantity))state.purchase(state.human,quantity);if(wantCastle)state.purchaseCastle(state.human,selectedCastle,true);clearQty();finishTurn(`Army purchased for ${cost} gold.`);}
 function pointerPosition(ev){const r=gameCanvas.getBoundingClientRect();return [(ev.clientX-r.left)*W/r.width,(ev.clientY-r.top)*H/r.height];}
