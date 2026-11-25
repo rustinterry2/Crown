@@ -596,13 +596,40 @@ function drawEventPage(page){
     if(lord)lordSquare(lord,426-width(line,'report')/2-25,y+12);
   });
 }
+// Monthly report is a continuous, clipped scroll area. Chronicle retains paging.
+const REPORT_VIEW={left:75,right:778,top:1168,bottom:1648};
+let reportDrag=null;
+function reportLayout(entries){
+  const rows=[];let y=6,lastDate='';
+  for(const entry of entries){
+    if(entry.date!==lastDate){if(rows.length)y+=10;rows.push({y,line:entry.date,heading:true});y+=51;lastDate=entry.date;}
+    wrap(entry.text,'report',610).forEach((line,i)=>{rows.push({y,line,lord:i===0?entry.lord:null});y+=49;});
+    y+=10;
+  }
+  return {rows,height:y+5};
+}
+function reportScrollLimit(layout){return Math.max(0,layout.height-(REPORT_VIEW.bottom-REPORT_VIEW.top));}
+function setReportScroll(value){
+  const next=Math.max(0,Math.min(value,reportScrollLimit(reportLayout(reportEntries))));
+  if(next!==reportScroll){reportScroll=next;render();}
+}
+function reportHit(x,y){return mode==='report'&&x>=REPORT_VIEW.left&&x<=REPORT_VIEW.right&&y>=REPORT_VIEW.top&&y<=REPORT_VIEW.bottom;}
 function drawReport(){
-  const pages=paginateEvents(reportEntries,true);reportScroll=Math.max(0,Math.min(reportScroll,pages.length-1));
+  const layout=reportLayout(reportEntries),v=REPORT_VIEW,viewHeight=v.bottom-v.top,max=reportScrollLimit(layout);
+  reportScroll=Math.max(0,Math.min(reportScroll,max));
   header(state.outcome==='victory'?'The Crown Is Thine':state.outcome==='defeat'?'Thy Castle Is Lost':'The Month Passes',reportMonth);
-  drawEventPage(pages[reportScroll]);
-  if(reportScroll>0)button('report_up','Prev',[85,1578,230,1640],'small');
-  text((reportScroll+1)+' / '+pages.length,426,1583,'small',LIGHT,'center');
-  if(reportScroll+1<pages.length)button('report_down','Next',[622,1578,767,1640],'small');
+  c.save();c.beginPath();c.rect(v.left,v.top,v.right-v.left-20,viewHeight);c.clip();
+  for(const row of layout.rows){
+    const y=v.top+row.y-reportScroll;if(y+52<v.top||y>v.bottom)continue;
+    text(row.line,417,y,'report',row.heading?LIGHT:INK,'center');
+    if(row.lord)lordSquare(row.lord,417-width(row.line,'report')/2-25,y+12);
+  }
+  c.restore();
+  if(max>0){
+    const x=v.right-13,trackTop=v.top+8,trackHeight=viewHeight-16,thumb=Math.max(35,trackHeight*viewHeight/layout.height);
+    c.fillStyle='#b68b59';c.fillRect(x,trackTop,7,trackHeight);
+    c.fillStyle='#704326';c.fillRect(x-2,trackTop+(trackHeight-thumb)*reportScroll/max,11,thumb);
+  }
   button('report_ok','Continue',[165,1664,687,1736]);
 }
 function drawHistory(){
@@ -650,7 +677,7 @@ function drawInvitation(maiden){
 }
 function drawAi(){header('The Lords\' Turns',status());lines([aiMessage||'The other lords prepare their orders.'],1260,70,'small');}
 function drawGuide(){if(guide==='off'||!['orders','conquest','transfer','move'].includes(mode))return;let target={conquest:'conquest',transfer:'transfer',plus:'transfer_right:soldiers',confirm:'transfer_confirm',move:'move'}[guide],btn=buttons.find(b=>b.key===target);let x,y;if(guide==='province'){let pt=mapInfo?.type==='random'?mapInfo.horses[guideTarget]:HORSES[guideTarget];if(!pt)return;[x,y]=pt;y-=37;}else if(btn){x=(btn.rect[0]+btn.rect[2])/2;y=btn.rect[1]-23;}else return;c.fillStyle='#ffd34f';c.strokeStyle='#5e3513';c.lineWidth=4;let dy=Math.sin(guideTicks/3)*8;c.beginPath();c.moveTo(x-18,y-35+dy);c.lineTo(x+18,y-35+dy);c.lineTo(x+18,y-10+dy);c.lineTo(x+29,y-10+dy);c.lineTo(x,y+17+dy);c.lineTo(x-29,y-10+dy);c.lineTo(x-18,y-10+dy);c.closePath();c.fill();c.stroke();}
-function render(){if(!fontMetrics)return;buttons.length=0;c.clearRect(0,0,W,H);if(mode==='splash'){fullScreen('title_splash.png');return;}if(mode==='scene'){fullScreen(scene,sceneOverlay);return;}if(mode==='setup'){renderSetup();return;}if(mode==='upload_preview'){renderUploadPreview();return;}renderMap();switch(mode){case 'orders':drawOrders();break;case 'read':drawRead();break;case 'conquest':drawConquest();break;case 'army':drawArmy();break;case 'castle_pick':drawCastlePick();break;case 'transfer':drawTransfer();break;case 'move':drawMove();break;case 'battle':drawBattle();break;case 'passage':drawPassage();break;case 'report':drawReport();break;case 'history':drawHistory();break;case 'accounts':drawAccounts();break;case 'notice':drawNotice();break;case 'tournament_offer':drawInvitation(false);break;case 'maiden_offer':drawInvitation(true);break;case 'ai_phase':drawAi();break;}drawGuide();}
+function render(){if(!fontMetrics)return;gameCanvas.style.touchAction=mode==='report'?'none':'manipulation';buttons.length=0;c.clearRect(0,0,W,H);if(mode==='splash'){fullScreen('title_splash.png');return;}if(mode==='scene'){fullScreen(scene,sceneOverlay);return;}if(mode==='setup'){renderSetup();return;}if(mode==='upload_preview'){renderUploadPreview();return;}renderMap();switch(mode){case 'orders':drawOrders();break;case 'read':drawRead();break;case 'conquest':drawConquest();break;case 'army':drawArmy();break;case 'castle_pick':drawCastlePick();break;case 'transfer':drawTransfer();break;case 'move':drawMove();break;case 'battle':drawBattle();break;case 'passage':drawPassage();break;case 'report':drawReport();break;case 'history':drawHistory();break;case 'accounts':drawAccounts();break;case 'notice':drawNotice();break;case 'tournament_offer':drawInvitation(false);break;case 'maiden_offer':drawInvitation(true);break;case 'ai_phase':drawAi();break;}drawGuide();}
 function alertText(s,back=mode,face=null){message=s;backMode=back;noticePortrait=face;mode='notice';render();}
 function sceneShow(file,returnMode=mode,notice='',noticeBack=returnMode,overlay=''){scene=file;sceneReturn=returnMode;sceneNotice=notice;sceneNoticeBack=noticeBack;sceneOverlay=overlay;mode='scene';render();}
 function showEnding(){
@@ -787,7 +814,6 @@ function handleClick(x,y){if(mode==='splash'){mode='setup';render();return;}if(m
 function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.character=k.endsWith(':random')?null:k.split(':').slice(1).join(':');else if(k.startsWith('setup_difficulty:'))options.difficulty=k.split(':')[1];else if(k==='setup_map:upload'){openMapPicker();}else if(k.startsWith('setup_map:'))options.map=k.split(':')[1];else if(k==='setup_begin')startCampaign();return;}
   if(mode==='upload_preview'){if(k==='upload_back'){uploadTicket++;uploadBusy=false;mode='setup';}else if(k==='upload_another')openMapPicker();else if(k==='upload_regenerate'&&uploadLand&&!uploadBusy)generateUpload();else if(k==='upload_accept'&&uploadPreview&&!uploadBusy){acceptedUpload=uploadPreview;options.map='upload';mode='setup';}return;}
   if(k==='notice_ok'){let back=backMode;if(back==='__story__')storyNext();else if(back==='__home_flash__')afterHomeFlash();else if(back==='__home_resume__'){pendingHomeAttack=null;resumeAi();}else if(back==='__home_defeat__'){pendingHomeAttack=null;finishReport();}else{mode=back;}return;}
-  if(k==='report_up'){reportScroll=Math.max(0,reportScroll-1);return;}if(k==='report_down'){reportScroll++;return;}
   if(k==='history_newer'){historyScroll=Math.max(0,historyScroll-1);return;}if(k==='history_older'){historyScroll++;return;}
   if(k==='report_ok'){reportStart=state.ledger.length;if(state.outcome)showEnding();else enterOrders(true);return;}
   if(k==='tournament_yes'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,.04);let r=state.changeRank(state.human,1);storyBegin([['scene','tournament_trumpets.png'],['text','Heralds sound their trumpets, and the lords gather before the lists.'],['scene','tournament_joust.png'],['text',`Before the assembled court, thou hast ridden with courage and won new renown. Thy leadership is now ${r}.`]]);return;}
@@ -826,13 +852,27 @@ function completePurchase(){if(costOf()>state.lords[state.human].treasury)throw 
 function pointerPosition(ev){const r=gameCanvas.getBoundingClientRect();return [(ev.clientX-r.left)*W/r.width,(ev.clientY-r.top)*H/r.height];}
 function buttonAt(x,y){return buttons.slice().reverse().find(b=>x>=b.rect[0]&&y>=b.rect[1]&&x<=b.rect[2]&&y<=b.rect[3])?.key||null;}
 gameCanvas.addEventListener('pointerdown',ev=>{
-  if(tapActive||mode==='ai_phase'||pressedPointer!==null)return;
-  const [x,y]=pointerPosition(ev);pressedKey=buttonAt(x,y);pressedPointer=ev.pointerId;pressedAt=Date.now();
+  if(tapActive||mode==='ai_phase'||pressedPointer!==null||reportDrag)return;
+  const [x,y]=pointerPosition(ev);
+  if(reportHit(x,y)){reportDrag={id:ev.pointerId,y,scroll:reportScroll};gameCanvas.setPointerCapture?.(ev.pointerId);return;}
+  pressedKey=buttonAt(x,y);pressedPointer=ev.pointerId;pressedAt=Date.now();
   if(pressedKey)render();
 });
-gameCanvas.addEventListener('pointercancel',()=>{pressedKey=null;pressedPointer=null;render();});
+gameCanvas.addEventListener('pointermove',ev=>{
+  if(!reportDrag||reportDrag.id!==ev.pointerId)return;
+  if(mode!=='report'){reportDrag=null;return;}
+  const [,y]=pointerPosition(ev);setReportScroll(reportDrag.scroll+reportDrag.y-y);
+});
+gameCanvas.addEventListener('wheel',ev=>{
+  const [x,y]=pointerPosition(ev);if(!reportHit(x,y))return;
+  ev.preventDefault();const r=gameCanvas.getBoundingClientRect();
+  const delta=ev.deltaMode===1?ev.deltaY*18:ev.deltaMode===2?ev.deltaY*r.height:ev.deltaY;
+  setReportScroll(reportScroll+delta*H/r.height);
+},{passive:false});
+gameCanvas.addEventListener('pointercancel',()=>{reportDrag=null;pressedKey=null;pressedPointer=null;render();});
 gameCanvas.addEventListener('pointerleave',()=>{if(pressedPointer!==null){pressedKey=null;pressedPointer=null;render();}});
 gameCanvas.addEventListener('pointerup',ev=>{
+  if(reportDrag){if(reportDrag.id===ev.pointerId){reportDrag=null;if(gameCanvas.hasPointerCapture?.(ev.pointerId))gameCanvas.releasePointerCapture(ev.pointerId);}return;}
   if(tapActive)return;
   const [x,y]=pointerPosition(ev),key=pressedKey,wasPointer=pressedPointer;
   if(wasPointer!==null&&wasPointer!==ev.pointerId)return;
