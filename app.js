@@ -16,7 +16,7 @@ let uploadLand=null,uploadPreview=null,acceptedUpload=null,uploadError='',upload
 function loadImage(file){return new Promise((resolve,reject)=>{let im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Failed loading '+file));im.src=A+(assetMap[file]||file);});}
 async function loadAssets(){let all=['board.png','font_atlas.png','hitmask.png','paint_alpha.png','title_splash.png','robin_sherwood.png','norman_castle.png','saxon_castle.png','maiden_swordfight.png','lady_catherine.png','the_end.png','tournament_joust.png','tournament_trumpets.png','home_castle_under_attack.png','home_castle_fallen.png'];
   all.push(...['wilfred','cedric','geoffrey','wolfric','robin','brian','edmund','philip','roger','reginald'].map(p=>'portrait_'+p+'.png'));
-  assetMap=await (await fetch(A+'asset_manifest.json')).json();
+  assetMap=await (await fetch(A+'asset_manifest.json?v=saxon-portraits-33162500')).json();
   await Promise.all(all.map(async f=>{img[f]=await loadImage(f);}));
   fontMetrics=await (await fetch(A+'font_metrics.json')).json();atlas=img['font_atlas.png'];hit=img['hitmask.png'];paint=img['paint_alpha.png'];
   const temp=document.createElement('canvas');temp.width=W;temp.height=H;let ctx=temp.getContext('2d',{willReadFrequently:true});ctx.drawImage(img['board.png'],0,0);baseData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(hit,0,0);hitData=ctx.getImageData(0,0,W,H);ctx.clearRect(0,0,W,H);ctx.drawImage(paint,0,0);paintData=ctx.getImageData(0,0,W,H);englandSelectionMask=buildEnglandSelectionMask(hitData.data);buildHomeCastleSprites();}
