@@ -4,7 +4,7 @@ export const U=['soldiers','knights','catapults'];
 export const PRICES={soldiers:1,knights:8,catapults:15,castle:20};
 export const T={1:['Cumbria',3,0],2:['Yorkshire',2,12],3:['Lancashire',4,6],4:['Lincolnshire',3,12],5:['Nottingham',2,0],6:['Gwynedd',2,16],7:['Leicester',2,5],8:['Norfolk',6,0],9:['Clwyd',3,0],10:['Cambridge',5,6],12:['Glamorgan',1,16],13:['Gloucester',7,12],14:['Buckingham',8,0],15:['Essex',6,8],16:['Hampshire',3,8],17:['Dorset',4,6],18:['Sussex',7,8],19:['Cornwall',8,0]};
 export const IDS=Object.keys(T).map(Number);
-export const ENGLAND={1:[2,3],2:[1,3,4],3:[1,2,5,6,7,9],4:[2,5,7,8,10],5:[3,4,7],6:[3,9,12],7:[3,4,5,9,10,13,14],8:[4,10,15],9:[3,6,7,12,13],10:[4,7,8,14,15],12:[6,9,13],13:[7,9,12,14,17],14:[7,10,13,15,16],15:[8,10,14,16,18],16:[14,15,17,18],17:[13,16,19],18:[15,16],19:[17]};
+export const ENGLAND={1:[2,3],2:[1,3,4,5],3:[1,2,5,6,7,9],4:[2,5,7,8,10],5:[2,3,4,7],6:[3,9,12],7:[3,4,5,9,10,13,14],8:[4,10,15],9:[3,6,7,12,13],10:[4,7,8,14,15],12:[6,9,13],13:[7,9,12,14,17],14:[7,10,13,15,16],15:[8,10,14,16,18],16:[14,15,17,18],17:[13,16,19],18:[15,16],19:[17]};
 export const CASTLES=[1,5,9,8,14,19];
 export const SAXON=[1,5,9], NORMAN=[8,14,19];
 export const SAXONS=['Wilfred of Ivanhoe','Cedric of Rotherwood','Geoffrey Longsword','Wolfric the Wild'];
