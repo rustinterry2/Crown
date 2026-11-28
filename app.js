@@ -5,7 +5,7 @@ const color=(a)=>`rgb(${a.join(',')})`;const INK='#432018',LIGHT='#663021',BEIGE
 const img={}, buttons=[];let fontMetrics,atlas,hit,paint,baseData,hitData,paintData,assetMap={};
 let mode='splash',state=null,options={character:null,difficulty:'easy',map:'england'},mapInfo=null;
 let selected=0,pendingTarget=null,attackingAlly=false,tactic='Stand and Fight',quantity={soldiers:0,knights:0,catapults:0},wantCastle=false,selectedCastle=null;
-let transferDraft={soldiers:0,knights:0,catapults:0};
+let transferDraft={soldiers:0,knights:0,catapults:0},transferReturnMode='conquest';
 let message='',backMode='orders',scene='',sceneReturn='orders',sceneNotice='',sceneNoticeBack='',sceneOverlay='',story=[],storyEnd='orders',pendingMaiden=null,summary=[],reportScroll=0,flashId=0,flashVisible=false,visualOwners=null,visualHorsePos=null,visualAlive=null,guide='conquest',guideTarget=0,guideTicks=0;
 let queue=[],queueIndex=0,aiMessage='',aiRunning=false,pendingHomeAttack=null,pendingHumanFlash=0,lastSceneBefore='';let coloredMap=null,coloredMapKey='',tapActive=false;
 let noticePortrait=null,englandSelectionMask=null,horseHitTargets=[];
@@ -638,7 +638,15 @@ function drawTransfer(){
   button('transfer_confirm','Confirm',[165,1581,687,1653]);
   button('back','Back',[165,1668,687,1740]);
 }
-function drawMove(){let p=state.lords[state.human];header('Move Army','Tap a bordering province above');text('From: '+T[p.campaign_province][0],426,1196,'name',INK,'center');lines(['Field army: '+SUMMARY(p.campaign_army),'Neutral or enemy attack ends the turn','Friendly travel is free','Tap Sherwood to request Robin'],1313,72,'small');button('back','Back to Conquest',[165,1622,687,1694]);}
+function drawMove(){
+  const p=state.lords[state.human];
+  header('Move Army','Tap a bordering province above');
+  text('From: '+T[p.campaign_province][0],426,1184,'name',INK,'center');
+  lines(['Field army: '+SUMMARY(p.campaign_army),'Neutral or enemy attack ends the turn','Friendly travel is free','Tap Sherwood to request Robin'],1270,61,'small');
+  // Reserve a fixed button slot; neither text nor Back moves when it is hidden.
+  if(state.transferHere(state.human))button('transfer','Transfer Troops',[165,1538,687,1610]);
+  button('back','Back to Conquest',[165,1622,687,1694]);
+}
 function drawBattle(){
   const id=pendingTarget,pr=state.provinces[id],owner=pr.owner;
   const ally=owner&&state.lords[owner]?.faction==='Saxon'&&owner!==state.human;
@@ -844,7 +852,7 @@ function showEnding(){
 function storyBegin(steps,ending='orders'){story=steps;storyEnd=ending;storyNext();}
 function storyNext(){if(!story.length){if(storyEnd==='orders'){enterOrders(false);return;}mode=storyEnd;render();return;}let [kind,payload]=story.shift();if(kind==='text')alertText(payload,'__story__');else if(kind==='scene')sceneShow(payload,'__story__');else if(kind==='action'){if(payload==='union'){state.maidenUnion(pendingMaiden);pendingMaiden=null;}storyNext();}}
 function enterOrders(begin=false){if(state.checkEnd()){showEnding();return;}mode='orders';selected=0;if(begin){const ally=state.maidenCandidate();if(ally){pendingMaiden=ally;mode='maiden_offer';state.tournament_pending=false;}else if(state.tournament_pending&&!state.tournament_held){mode='tournament_offer';}}render();}
-function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='upload'?acceptedUpload:options.map==='random'?randomMap(seed):null;if(options.map==='upload'&&!mapInfo)throw Error('Choose an uploaded kingdom first.');outlineCache.clear();state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';clearVisualState();reportTurn=0;reportEntries=[];historyScroll=0;reportMonth='';guide='conquest';guideTarget=0;guideTicks=0;quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
+function startCampaign(){let seed=(Math.random()*4294967296)>>>0;mapInfo=options.map==='upload'?acceptedUpload:options.map==='random'?randomMap(seed):null;if(options.map==='upload'&&!mapInfo)throw Error('Choose an uploaded kingdom first.');outlineCache.clear();state=new CrownState({seed,difficulty:options.difficulty,humanChoice:options.character,neighbors:mapInfo?.neighbors||ENGLAND});mode='orders';clearVisualState();reportTurn=0;reportEntries=[];historyScroll=0;reportMonth='';guide='conquest';guideTarget=0;guideTicks=0;transferReturnMode='conquest';resetTransferDraft();quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;pendingTarget=null;pendingMaiden=null;queue=[];summary=[];reportScroll=0;enterOrders(true);}
 function costOf(){return U.reduce((n,u)=>n+quantity[u]*PRICES[u],0)+(wantCastle?20:0);}
 function clearQty(){quantity={soldiers:0,knights:0,catapults:0};wantCastle=false;}
 function finishTurn(msg,defer=false){
@@ -990,7 +998,7 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k==='tournament_no'){state.tournament_pending=false;state.tournament_held=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);alertText(`Thou hast declined the tournament. Thy leadership is now ${r}.`,'orders');return;}
   if(k==='maiden_yes'){let r=state.changeRank(state.human,1),ally=pendingMaiden;storyBegin([['text','By night thou dost approach the Norman stronghold. Steel must decide whether Lady Catherine shall be freed.'],['scene','maiden_swordfight.png'],['text','The Norman guards are overcome, and Lady Catherine is safely freed from the keep.'],['scene','lady_catherine.png'],['action','union'],['text',`Lady Catherine thanks thee for her rescue. The lands of ${SHORT[ally]} now stand with thine. Thirty soldiers await thee at ${T[state.lords[ally].home_province][0]} Stronghold. Thy leadership is now ${r}.`]]);return;}
   if(k==='maiden_no'){state.maiden_rescue_done=true;state.changeLeadership(state.human,-.04);let r=state.changeRank(state.human,-1);pendingMaiden=null;alertText(`Thou hast refused the plea. Thy leadership is now ${r}.`,'orders');return;}
-  if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;attackingAlly=false;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
+  if(k==='back'||k==='back_history'){if(k==='back_history')mode='history';else if(mode==='transfer'){resetTransferDraft();guideTap(k);mode=transferReturnMode;transferReturnMode='conquest';}else if(mode==='move')mode='conquest';else if(['battle','passage'].includes(mode)){mode='move';pendingTarget=null;attackingAlly=false;}else if(mode==='castle_pick')mode='army';else mode='orders';return;}
   if(k==='read'){mode='read';selected=0;return;}if(k==='conquest'){guideTap(k);mode='conquest';return;}if(k==='army'){clearQty();mode='army';return;}if(k==='end'){state.event('turn_passed',state.human,state.lords[state.human].campaign_province);finishTurn('Thy lord passed this month.');return;}if(k==='history'){historyScroll=0;mode='history';return;}if(k==='accounts'){mode='accounts';return;}
   if(mode==='transfer'&&(k.startsWith('transfer_left:')||k.startsWith('transfer_right:'))){
     const r=state.castleReserve(state.human),u=k.split(':')[1];
@@ -1001,8 +1009,8 @@ function action(k){if(mode==='setup'){if(k.startsWith('setup_lord:'))options.cha
   if(k.startsWith('minus:')||k.startsWith('plus:')){let sign=k.startsWith('plus:')?1:-1,u=k.split(':')[1];if(u==='castle'){if(sign<0)wantCastle=false;else if(state.lords[state.human].treasury>=costOf()+20)wantCastle=true;return;}let step=u==='soldiers'?5:1;if(mode==='army'){let available=state.lords[state.human].treasury-costOf();if(sign>0)quantity[u]+=Math.max(0,Math.min(step,Math.floor(available/PRICES[u])));else quantity[u]=Math.max(0,quantity[u]-step);}return;}
   if(k==='buy'){if(costOf()<=0)throw Error('Choose soldiers, knights, catapults or a castle');if(costOf()>state.lords[state.human].treasury)throw Error('Not enough gold');if(wantCastle){mode='castle_pick';selectedCastle=null;return;}completePurchase();return;}
   if(k==='build_confirm'){completePurchase();return;}
-  if(k==='transfer'){guideTap(k);if(!state.transferHere(state.human))throw Error('Stand at thy Stronghold or a Castle to transfer troops');mode='transfer';resetTransferDraft();return;}
-  if(k==='transfer_confirm'&&mode==='transfer'){confirmTransfer(state,state.human,transferDraft);guideTap(k);resetTransferDraft();mode='conquest';return;}
+  if(k==='transfer'&&(mode==='conquest'||mode==='move')){guideTap(k);if(!state.transferHere(state.human))throw Error('Stand at thy Stronghold or a Castle to transfer troops');transferReturnMode=mode;mode='transfer';resetTransferDraft();return;}
+  if(k==='transfer_confirm'&&mode==='transfer'){confirmTransfer(state,state.human,transferDraft);guideTap(k);resetTransferDraft();mode=transferReturnMode;transferReturnMode='conquest';return;}
   if(k==='move'){guideTap(k);mode='move';selected=0;return;}
   if(k==='robin'){visitRobin('conquest');return;}
   if(k.startsWith('tactic:')){tactic=k.split(':').slice(1).join(':');return;}
